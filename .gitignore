@@ -11,3 +11,7 @@ packages/
 .vs/
 .idea/
 publish/
+*.sln
+*.csv
+*.txt
+*.heat
