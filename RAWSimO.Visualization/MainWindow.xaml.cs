@@ -751,6 +751,16 @@ namespace RAWSimO.Visualization
                         InitVisuals();
                         // Reset the view
                         ResetView();
+
+                        // Init setting configuration ui-elements
+                        VisualParameterInputHelper.FillParameterItems(Dispatcher, WrapPanelSettingConfiguration.Children, _instance.SettingConfig);
+                        // Init control configuration ui-elements
+                        VisualParameterInputHelper.FillParameterItems(Dispatcher, WrapPanelControlConfiguration.Children, _instance.ControllerConfig);
+                        // Init layout configuration ui-elements
+                        if (_instance.LayoutConfig != null)
+                            VisualParameterInputHelper.FillParameterItems(Dispatcher, WrapPanelInstanceLayout.Children, _instance.LayoutConfig);
+                        else
+                            LogLine("Need .xlayo to load instance layout parameters");
                     }
                 }
             }

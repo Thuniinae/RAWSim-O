@@ -119,6 +119,7 @@ namespace RAWSimO.Core.IO
                 // Submit config first to the instance object
                 instance.SettingConfig = settingConfig;
                 instance.ControllerConfig = controlConfig;
+                instance.LayoutConfig = layoutConfig;
             }
             else
             {

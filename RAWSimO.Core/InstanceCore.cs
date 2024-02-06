@@ -56,6 +56,10 @@ namespace RAWSimO.Core
         /// </summary>
         public ControlConfiguration ControllerConfig { get; set; }
         /// <summary>
+        /// The layout configuration to use for generating instances.
+        /// </summary>
+        public LayoutConfiguration LayoutConfig{get; set;}
+        /// <summary>
         /// All SKUs available in this instance.
         /// </summary>
         public List<ItemDescription> ItemDescriptions = new List<ItemDescription>();
