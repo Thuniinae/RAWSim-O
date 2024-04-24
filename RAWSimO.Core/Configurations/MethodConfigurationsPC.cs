@@ -353,6 +353,10 @@ namespace RAWSimO.Core.Configurations
         /// Order by the estimate amount of work that can be done at the station.
         /// </summary>
         WorkAmount,
+        /// <summary>
+        /// Order by the estimate arrived time in consideration of congestion
+        /// </summary>
+        Congestion,
     }
     /// <summary>
     /// The base class for all pod selection scorer parameter classes.
@@ -363,6 +367,7 @@ namespace RAWSimO.Core.Configurations
     [XmlInclude(typeof(PCScorerPodForOStationBotDemand))]
     [XmlInclude(typeof(PCScorerPodForOStationBotCompleteable))]
     [XmlInclude(typeof(PCScorerPodForOStationBotWorkAmount))]
+    [XmlInclude(typeof(PCScorerPodForOStationBotCongestion))]
     public abstract class PCScorerPodForOStationBot
     {
         /// <summary>
@@ -504,6 +509,18 @@ namespace RAWSimO.Core.Configurations
         /// Indicates whether to only estimate the distance between pod and station in order to calculate a penalty (instead of computing the real paths with A*, computationally costly).
         /// </summary>
         public bool EstimatePodStationDistancePenalty = false;
+    }
+
+    /// <summary>
+    /// Exposes the parameters for the given pod selection scorer / strategy.
+    /// </summary>
+    public class PCScorerPodForOStationBotCongestion : PCScorerPodForOStationBot
+    {
+        /// <summary>
+        /// The type of the method.
+        /// </summary>
+        /// <returns>The type.</returns>
+        public override PrefPodForOStationBot Type() { return PrefPodForOStationBot.Congestion; }
     }
 
     #endregion

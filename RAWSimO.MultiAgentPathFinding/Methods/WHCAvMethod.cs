@@ -6,7 +6,9 @@ using RAWSimO.MultiAgentPathFinding.Toolbox;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 
 namespace RAWSimO.MultiAgentPathFinding.Methods
@@ -201,6 +203,35 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             }
 
             return conflictFree;
+        }
+
+        public bool findPath(out double timeCost, double currentTime, Agent agent)
+        {
+            if (agent != null) 
+            {
+                //Create RRA* search if necessary.
+                //Necessary if the agent has none or the agents destination has changed
+                ReverseResumableAStar rraStar;
+                if (!rraStars.TryGetValue(agent.ID, out rraStar) || rraStar.StartNode != agent.DestinationNode ||
+                    UseDeadlockHandler && _deadlockHandler.IsInDeadlock(agent, currentTime)) // TODO this last expression is used to set back the state of the RRA* in case of a deadlock - this is only a hotfix
+                {
+                    rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
+                }
+
+                //search my path to the goal
+                var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, currentTime + LengthOfAWindow, _reservationTable, agent, rraStars[agent.ID]);
+                var found = aStar.Search();
+                if(found) 
+                {
+                    List<ReservationTable.Interval> reservations;
+                    aStar.GetPathAndReservations(ref agent.Path, out reservations);
+                    timeCost = reservations.Last().End;
+                    return true;
+                }
+            }
+            // failed to find path
+            timeCost = double.MaxValue;
+            return false;
         }
 
         /// <summary>

@@ -12,6 +12,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static RAWSimO.Core.Control.RepositioningManager;
+using RAWSimO.MultiAgentPathFinding.Methods;
+using RAWSimO.MultiAgentPathFinding.Algorithms.AStar;
+using RAWSimO.Core.Bots;
+using RAWSimO.MultiAgentPathFinding.Elements;
+using System.IO; // for debug
 
 namespace RAWSimO.Core.Control
 {
@@ -258,6 +263,8 @@ namespace RAWSimO.Core.Control
                     { PCScorerPodForOStationBotCompleteable tempcfg = scorerConfig as PCScorerPodForOStationBotCompleteable; return () => { return Score(tempcfg, _currentBot, _currentPod, _currentOStation); }; }
                 case PrefPodForOStationBot.WorkAmount:
                     { PCScorerPodForOStationBotWorkAmount tempcfg = scorerConfig as PCScorerPodForOStationBotWorkAmount; return () => { return Score(tempcfg, _currentBot, _currentPod, _currentOStation); }; }
+                case PrefPodForOStationBot.Congestion:
+                    { PCScorerPodForOStationBotCongestion tempcfg = scorerConfig as PCScorerPodForOStationBotCongestion; return () => { return Score(tempcfg, _currentBot, _currentPod, _currentOStation); }; }
                 default: throw new ArgumentException("Unknown score type: " + scorerConfig.Type());
             }
         }
@@ -842,6 +849,38 @@ namespace RAWSimO.Core.Control
                     value += WrongTierPenaltyForBundleWorkAmount;
             }
             return value;
+        }
+
+        /// <summary>
+        /// Determines a score that can be used to decide about an assignment.
+        /// </summary>
+        /// <param name="config">The config specifying further parameters.</param>
+        /// <param name="bot">The bot.</param>
+        /// <param name="pod">The pod.</param>
+        /// <param name="station">The station.</param>
+        /// <returns>A score that can be used to decide about the best assignment. Minimization / Smaller is better.</returns>
+        public double Score(PCScorerPodForOStationBotCongestion config, Bot bot, Pod pod, OutputStation station)
+        {
+            
+            var pathManager = this.Instance.Controller.PathManager;
+            var pathFinder = pathManager.PathFinder as WHCAvStarMethod;
+            var currentTime = this.Instance.Controller.CurrentTime;
+            double totalTimeCost = 0;
+            // From bot to pod
+            // create agent
+            Agent agent;
+            pathManager.getBotAgent(out agent, bot, currentTime, bot.CurrentWaypoint, pod.Waypoint, false);
+            double timeCost;
+            var success = pathFinder.findPath(out timeCost, currentTime, agent);
+            if (!success) return double.MaxValue;
+            totalTimeCost += timeCost;
+
+            // From pod to station
+            pathManager.getBotAgent(out agent, bot, currentTime, pod.Waypoint, station.Waypoint, true);
+            success = pathFinder.findPath(out timeCost, currentTime, agent);
+            if (!success) return double.MaxValue;
+            totalTimeCost += timeCost;
+            return totalTimeCost;
         }
 
         #endregion

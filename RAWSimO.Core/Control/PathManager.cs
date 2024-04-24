@@ -389,6 +389,64 @@ namespace RAWSimO.Core.Control
         }
 
         /// <summary>
+        /// create Agent from a bot position and destination
+        /// </summary>
+        /// <returns>agent</returns>
+        public void getBotAgent(out Agent agent, Bot abot, double currentTime, Waypoint startWaypoint, Waypoint finalDestination, bool carryingPod)
+        {
+            var bot = abot as BotNormal;
+            // Get way points
+            Waypoint nextWaypoint = startWaypoint;
+            Waypoint destination = finalDestination;
+        
+            // Has the destination a queue?
+            if (finalDestination != null && _queueManagers.ContainsKey(finalDestination))
+                // Use the first buffer path waypoint as the destination
+                destination = _queueManagers[finalDestination].Queue.Last();
+            
+            // If already within a queue, there is no path finding needed => Queue manager does it for us
+            if (bot.IsQueueing)
+            {
+                agent = null;
+                return;
+            }
+            // Ignore bots for which origin matches destination
+            if (nextWaypoint == destination)
+            {
+                agent = null;
+                return;
+            }
+
+            // Create reservationToNextNode
+            var reservationsToNextNode = new List<ReservationTable.Interval>(_reservations[bot]);
+            reservationsToNextNode.RemoveAt(reservationsToNextNode.Count - 1); //remove last blocking node
+
+            if (bot.NextWaypoint == null)
+                reservationsToNextNode.Clear();
+
+            // Create agent
+            agent = new Agent
+            {
+                ID = bot.ID,
+                NextNode = _waypointIds[nextWaypoint],
+                ReservationsToNextNode = reservationsToNextNode,
+                ArrivalTimeAtNextNode = (reservationsToNextNode.Count == 0) ? currentTime : Math.Max(currentTime, reservationsToNextNode[reservationsToNextNode.Count - 1].End),
+                OrientationAtNextNode = bot.GetTargetOrientation(),
+                DestinationNode = _waypointIds[destination],
+                FinalDestinationNode = _waypointIds[finalDestination],
+                Path = bot.Path, //path reference => will be filled
+                FixedPosition = bot.hasFixedPosition(),
+                Resting = bot.IsResting(),
+                CanGoThroughObstacles = Instance.ControllerConfig.PathPlanningConfig.CanTunnel && !carryingPod,
+                Physics = bot.Physics,
+                RequestReoptimization = bot.RequestReoptimization,
+                Queueing = bot.IsQueueing,
+                NextNodeObject = nextWaypoint,
+                DestinationNodeObject = destination,
+            };
+        }
+
+        /// <summary>
         /// Gets the way point by node identifier.
         /// </summary>
         /// <param name="node">The node.</param>
