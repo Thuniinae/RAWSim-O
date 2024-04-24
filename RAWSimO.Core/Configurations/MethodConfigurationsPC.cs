@@ -631,7 +631,8 @@ namespace RAWSimO.Core.Configurations
                 case PrefPodForIStationBot.Random: name += "r"; break;
                 case PrefPodForIStationBot.Nearest: name += "n"; break;
                 case PrefPodForIStationBot.WorkAmount: name += "w"; break;
-                default: throw new ArgumentException("Unexpected argument!");
+                case PrefPodForIStationBot.Demand: name += "d"; break;
+                default: name += $"IPS{InputPodScorer.Type()}"; break;
             }
             switch (OutputPodScorer.Type())
             {
@@ -640,21 +641,22 @@ namespace RAWSimO.Core.Configurations
                 case PrefPodForOStationBot.Nearest: name += "n"; break;
                 case PrefPodForOStationBot.Completeable: name += "c"; break;
                 case PrefPodForOStationBot.WorkAmount: name += "w"; break;
-                default: throw new ArgumentException("Unexpected argument!");
+                case PrefPodForOStationBot.Congestion: name += "co"; break;
+                default: name += $"OPS{OutputPodScorer.Type()}"; break;
             }
             switch (InputExtendedSearchScorer.Type())
             {
                 case PrefIStationForBotWithPod.Random: name += "r"; break;
                 case PrefIStationForBotWithPod.Nearest: name += "n"; break;
                 case PrefIStationForBotWithPod.WorkAmount: name += "w"; break;
-                default: throw new ArgumentException("Unexpected argument!");
+                default: name += $"IEPS{InputExtendedSearchScorer.Type()}"; break;
             }
             switch (OutputExtendedSearchScorer.Type())
             {
                 case PrefOStationForBotWithPod.Random: name += "r"; break;
                 case PrefOStationForBotWithPod.Nearest: name += "n"; break;
                 case PrefOStationForBotWithPod.WorkAmount: name += "w"; break;
-                default: throw new ArgumentException("Unexpected argument!");
+                default: name += $"OEPS{OutputExtendedSearchScorer.Type()}"; break;
             }
             return name;
         }
