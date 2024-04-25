@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ControlConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Name>PPCv3</Name>
+  <PathPlanningConfig xsi:type="WHCAvStarPathPlanningConfiguration">
+    <Name />
+    <AutoSetParameter>false</AutoSetParameter>
+    <CanTunnel>true</CanTunnel>
+    <LengthOfAWaitStep>2</LengthOfAWaitStep>
+    <RuntimeLimitPerAgent>0.1</RuntimeLimitPerAgent>
+    <RunTimeLimitOverall>1</RunTimeLimitOverall>
+    <Clocking>1</Clocking>
+    <LengthOfAWindow>30</LengthOfAWindow>
+    <AbortAtFirstConflict>true</AbortAtFirstConflict>
+    <UseDeadlockHandler>true</UseDeadlockHandler>
+  </PathPlanningConfig>
+  <TaskAllocationConfig xsi:type="BalancedTaskAllocationConfiguration">
+    <Name>Bala</Name>
+    <BotReallocationTimeout>30</BotReallocationTimeout>
+    <WeightInputStations>1</WeightInputStations>
+    <WeightOutputStations>2</WeightOutputStations>
+    <WeightRepositioning>0</WeightRepositioning>
+    <BotsPerStationLimit>9</BotsPerStationLimit>
+    <PreferSameTier>true</PreferSameTier>
+    <ExtendSearch>false</ExtendSearch>
+    <ExtendedSearchRadius>8</ExtendedSearchRadius>
+    <SearchAll>false</SearchAll>
+    <RepositionBeforeRest>true</RepositionBeforeRest>
+    <PodSelectionConfig>
+      <Name>CompCong</Name>
+      <OnTheFlyExtract>false</OnTheFlyExtract>
+      <OnTheFlyStore>false</OnTheFlyStore>
+      <FilterForConsideration>AssignedAndCompleteQueued</FilterForConsideration>
+      <FilterForReservation>AssignedAndCompleteQueued</FilterForReservation>
+      <InputExtendedSearchScorer xsi:type="PCScorerIStationForBotWithPodWorkAmount">
+        <IncludeAge>false</IncludeAge>
+        <PreferSameTier>true</PreferSameTier>
+      </InputExtendedSearchScorer>
+      <InputExtendedSearchScorerTieBreaker1 xsi:type="PCScorerIStationForBotWithPodNearest">
+        <DistanceMetric>Euclidean</DistanceMetric>
+      </InputExtendedSearchScorerTieBreaker1>
+      <InputExtendedSearchScorerTieBreaker2 xsi:type="PCScorerIStationForBotWithPodRandom">
+        <PreferSameTier>true</PreferSameTier>
+      </InputExtendedSearchScorerTieBreaker2>
+      <OutputExtendedSearchScorer xsi:type="PCScorerOStationForBotWithPodWorkAmount">
+        <ValueMetric>Picks</ValueMetric>
+        <OnlyPositiveLateness>false</OnlyPositiveLateness>
+        <PreferSameTier>true</PreferSameTier>
+      </OutputExtendedSearchScorer>
+      <OutputExtendedSearchScorerTieBreaker1 xsi:type="PCScorerOStationForBotWithPodNearest">
+        <DistanceMetric>Euclidean</DistanceMetric>
+      </OutputExtendedSearchScorerTieBreaker1>
+      <OutputExtendedSearchScorerTieBreaker2 xsi:type="PCScorerOStationForBotWithPodRandom">
+        <PreferSameTier>true</PreferSameTier>
+      </OutputExtendedSearchScorerTieBreaker2>
+      <InputPodScorer xsi:type="PCScorerPodForIStationBotRandom">
+        <PreferSameTier>true</PreferSameTier>
+      </InputPodScorer>
+      <InputPodScorerTieBreaker1 xsi:type="PCScorerPodForIStationBotRandom">
+        <PreferSameTier>true</PreferSameTier>
+      </InputPodScorerTieBreaker1>
+      <InputPodScorerTieBreaker2 xsi:type="PCScorerPodForIStationBotRandom">
+        <PreferSameTier>true</PreferSameTier>
+      </InputPodScorerTieBreaker2>
+      <OutputPodScorer xsi:type="PCScorerPodForOStationBotCompleteable">
+        <IncludeQueuedOrders>true</IncludeQueuedOrders>
+      </OutputPodScorer>
+      <OutputPodScorerTieBreaker1 xsi:type="PCScorerPodForOStationBotCongestion" />
+      <OutputPodScorerTieBreaker2 xsi:type="PCScorerPodForOStationBotRandom">
+        <PreferSameTier>true</PreferSameTier>
+      </OutputPodScorerTieBreaker2>
+    </PodSelectionConfig>
+    <RestLocationOrderType>MiddleSameTier</RestLocationOrderType>
+  </TaskAllocationConfig>
+  <StationActivationConfig xsi:type="ActivateAllStationActivationConfiguration">
+    <Name />
+  </StationActivationConfig>
+  <ItemStorageConfig xsi:type="EmptiestItemStorageConfiguration">
+    <Name />
+    <StickToPodUntilFull>true</StickToPodUntilFull>
+    <BufferThreshold>0.8</BufferThreshold>
+    <BufferTimeout>1200</BufferTimeout>
+  </ItemStorageConfig>
+  <PodStorageConfig xsi:type="RandomPodStorageConfiguration">
+    <Name />
+    <PreferSameTier>true</PreferSameTier>
+  </PodStorageConfig>
+  <RepositioningConfig xsi:type="DummyRepositioningConfiguration">
+    <Name />
+  </RepositioningConfig>
+  <OrderBatchingConfig xsi:type="RandomOrderBatchingConfiguration">
+    <Name />
+    <Recycle>false</Recycle>
+  </OrderBatchingConfig>
+  <ReplenishmentBatchingConfig xsi:type="RandomReplenishmentBatchingConfiguration">
+    <Name />
+    <Recycle>true</Recycle>
+  </ReplenishmentBatchingConfig>
+  <MethodManagementConfig xsi:type="NoChangeMethodManagementConfiguration">
+    <Name />
+  </MethodManagementConfig>
+  <CommentTag1 />
+  <CommentTag2 />
+  <CommentTag3 />
+</ControlConfiguration>
