@@ -857,25 +857,32 @@ namespace RAWSimO.Visualization
 
         private void ButtonSaveControlConfiguration_Click(object sender, RoutedEventArgs e)
         {
+            try
+            {    
             // Parse the configuration
-            ParseConfiguration();
+                ParseConfiguration();
 
-            // Init save dialog
-            SaveFileDialog dialog = new SaveFileDialog();
-            dialog.FileName = _controlConfiguration.Name; // Default file name
-            dialog.DefaultExt = ".xconf"; // Default file extension
-            dialog.Filter = "XCONF Files (.xconf)|*.xconf"; // Filter files by extension
+                // Init save dialog
+                SaveFileDialog dialog = new SaveFileDialog();
+                dialog.FileName = _controlConfiguration.Name; // Default file name
+                dialog.DefaultExt = ".xconf"; // Default file extension
+                dialog.Filter = "XCONF Files (.xconf)|*.xconf"; // Filter files by extension
 
-            // Show save file dialog box
-            bool? userClickedOK = dialog.ShowDialog();
+                // Show save file dialog box
+                bool? userClickedOK = dialog.ShowDialog();
 
-            // Process save file dialog box results
-            if (userClickedOK == true)
+                // Process save file dialog box results
+                if (userClickedOK == true)
+                {
+                    // Save it
+                    string filename = dialog.FileName;
+                    _controlConfiguration.Name = System.IO.Path.GetFileNameWithoutExtension(filename);
+                    InstanceIO.WriteConfiguration(filename, _controlConfiguration);
+                }
+            }
+            catch (Exception ex)
             {
-                // Save it
-                string filename = dialog.FileName;
-                _controlConfiguration.Name = System.IO.Path.GetFileNameWithoutExtension(filename);
-                InstanceIO.WriteConfiguration(filename, _controlConfiguration);
+                LogLine(ex.ToString());
             }
         }
 
