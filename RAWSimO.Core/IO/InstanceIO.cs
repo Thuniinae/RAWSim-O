@@ -259,8 +259,16 @@ namespace RAWSimO.Core.IO
         public static void WriteConfiguration(string path, ControlConfiguration config)
         {
             // Serialize it
+            try // debug only
+            {
             using (TextWriter writer = new StreamWriter(path))
                 _controlConfigSerializer.Serialize(writer, config);
+            }
+            catch (Exception e)
+            {
+                using (TextWriter writer = new StreamWriter(path))
+                    writer.WriteLine(e);
+            }
         }
         /// <summary>
         /// Writes the order list to a file.
