@@ -540,5 +540,45 @@ namespace RAWSimO.Core.Configurations
         }
     }
 
+    /// <summary>
+    /// The configuration for the corresponding method.
+    /// </summary>
+    public class FullySuppliedOrderBatchingConfiguration : OrderBatchingConfiguration
+    {
+        /// <summary>
+        /// Not real tiebreaker, indicates how to select from orders that are fully-supplied (default: FCFS).
+        /// </summary>
+        public OrderSelectionTieBreaker TieBreaker = OrderSelectionTieBreaker.FCFS;
+        /// <summary>
+        /// Indicates whether a fast lane slot is used, i.e. one slot of each station is kept free for immediately fulfillable orders.
+        /// </summary>
+        public bool FastLane = true;
+        /// <summary>
+        /// Indicates that orders already late will be preferred, but still need match in FullySupplied (default: false).
+        /// </summary>
+        public bool LateBeforeMatch = false;
+        /// <summary>
+        /// Indicates how to break ties when assigning fast lane orders.
+        /// </summary>
+        public FastLaneTieBreaker FastLaneTieBreaker = FastLaneTieBreaker.EarliestDueTime;
+        /// <summary>
+        /// Returns a name identifying the method.
+        /// </summary>
+        /// <returns>The name of the method.</returns>
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override OrderBatchingMethodType GetMethodType() { return OrderBatchingMethodType.FullySupplied; }
+        /// <summary>
+        /// Returns a name identifying the method.
+        /// </summary>
+        /// <returns>The name of the method.</returns>
+        public override string GetMethodName()
+        {
+            if (!string.IsNullOrWhiteSpace(Name)) return Name;
+            return "FullySupplied";
+        }
+    }
     #endregion
 }

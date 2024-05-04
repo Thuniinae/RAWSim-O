@@ -67,6 +67,14 @@ namespace RAWSimO.Core.Control
         /// </summary>
         private VolatileIDDictionary<ItemDescription, int> _availableCounts;
         /// <summary>
+        /// Stores the available numbers of items per SKU in all inbound pods to stations.
+        /// </summary>
+        private VolatileIDDictionary<ItemDescription, int> _availableNumInInBoundPods;
+        /// <summary>
+        /// The time when last DoExtractTask is executed.
+        /// </summary>
+        private double lastUpdateTime = -1.0;
+        /// <summary>
         /// Initializes some fields for pod selection.
         /// </summary>
         private void InitPodSelection()
@@ -932,25 +940,50 @@ namespace RAWSimO.Core.Control
         /// <param name="extendSearchRadius">The radius by which the search can be expanded.</param>
         /// <param name="config">Pod selection config to use.</param>
         /// <returns>true if bot has a new store task or is just parking the pod, false if it is doing a rest task.</returns>
-        protected bool DoStoreTaskForStation(Bot bot, InputStation iStation, bool extendSearch, double extendSearchRadius, DefaultPodSelectionConfiguration config)
+        protected bool DoStoreTaskForStation(Bot bot, InputStation iStation, bool extendSearch, double extendSearchRadius, PodSelectionConfiguration config)
         {
             // Init
             InitPodSelection();
-            // --> Prepare best candidate selectors
-            if (_bestIStationCandidateSelector == null)
+            
+            if (config.GetType() == typeof(DefaultPodSelectionConfiguration)) 
             {
-                _bestIStationCandidateSelector = new BestCandidateSelector(false,
-                    GenerateScorerIStationForBotWithPod(config.InputExtendedSearchScorer),
-                    GenerateScorerIStationForBotWithPod(config.InputExtendedSearchScorerTieBreaker1),
-                    GenerateScorerIStationForBotWithPod(config.InputExtendedSearchScorerTieBreaker2));
+                var _config = config as DefaultPodSelectionConfiguration;
+                // --> Prepare best candidate selectors
+                if (_bestIStationCandidateSelector == null)
+                {
+                    _bestIStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorer),
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorerTieBreaker1),
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorerTieBreaker2));
+                }
+                if (_bestPodIStationCandidateSelector == null)
+                {
+                    _bestPodIStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerPodForIStationBot(_config.InputPodScorer),
+                        GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker1),
+                        GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker2));
+                }
             }
-            if (_bestPodIStationCandidateSelector == null)
+            else if (config.GetType() == typeof(FullyDemandPodSelectionConfiguration)) 
             {
-                _bestPodIStationCandidateSelector = new BestCandidateSelector(false,
-                    GenerateScorerPodForIStationBot(config.InputPodScorer),
-                    GenerateScorerPodForIStationBot(config.InputPodScorerTieBreaker1),
-                    GenerateScorerPodForIStationBot(config.InputPodScorerTieBreaker2));
+                var _config = config as FullyDemandPodSelectionConfiguration;
+                // --> Prepare best candidate selectors
+                if (_bestIStationCandidateSelector == null)
+                {
+                    _bestIStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorer),
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorerTieBreaker1),
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorerTieBreaker2));
+                }
+                if (_bestPodIStationCandidateSelector == null)
+                {
+                    _bestPodIStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerPodForIStationBot(_config.InputPodScorer),
+                        GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker1),
+                        GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker2));
+                }
             }
+            else throw new ArgumentException("Unknown pod selection type: " + config.GetType().ToString());
 
             // Try another task with the current pod if there is one
             if (bot.Pod != null)
@@ -1084,146 +1117,258 @@ namespace RAWSimO.Core.Control
         /// <param name="extendedSearchRadius">The radius by which the search can be expanded.</param>
         /// <param name="config">Pod selection config to use.</param>
         /// /// <returns>true if bot has a new extract task or is just parking the pod, false if it is doing a rest task.</returns>
-        protected bool DoExtractTaskForStation(Bot bot, OutputStation oStation, bool extendSearch, double extendedSearchRadius, DefaultPodSelectionConfiguration config)
+        protected bool DoExtractTaskForStation(Bot bot, OutputStation oStation, bool extendSearch, double extendedSearchRadius, PodSelectionConfiguration config)
         {
             // Init
             InitPodSelection();
-            // --> Prepare best candidate selectors
-            if (_bestOStationCandidateSelector == null)
+            if (config.GetType() == typeof(DefaultPodSelectionConfiguration))
             {
-                _bestOStationCandidateSelector = new BestCandidateSelector(false,
-                    GenerateScorerOStationForBotWithPod(config.OutputExtendedSearchScorer),
-                    GenerateScorerOStationForBotWithPod(config.OutputExtendedSearchScorerTieBreaker1),
-                    GenerateScorerOStationForBotWithPod(config.OutputExtendedSearchScorerTieBreaker2));
-            }
-            if (_bestPodOStationCandidateSelector == null)
-            {
-                _bestPodOStationCandidateSelector = new BestCandidateSelector(false,
-                    GenerateScorerPodForOStationBot(config.OutputPodScorer),
-                    GenerateScorerPodForOStationBot(config.OutputPodScorerTieBreaker1),
-                    GenerateScorerPodForOStationBot(config.OutputPodScorerTieBreaker2));
-            }
-
-            // Try another task with the current pod if there is one
-            if (bot.Pod != null)
-            {
-                // Check for more work to do with the current combination
-                if (AnyRelevantRequests(bot.Pod, oStation, config.FilterForConsideration))
+                var _config = config as DefaultPodSelectionConfiguration;
+                // --> Prepare best candidate selectors
+                if (_bestOStationCandidateSelector == null)
                 {
-                    // Get all fitting requests
-                    List<ExtractRequest> fittingRequests = GetPossibleRequests(bot.Pod, oStation, config.FilterForReservation);
-                    // Log
-                    Instance.LogVerbose("PC (extract): Recycling combination (" + fittingRequests.Count + " requests)");
-                    // Simply execute the next task with the pod
-                    EnqueueExtract(
-                        bot, // The bot itself
-                        oStation, // The current station
-                        bot.Pod, // Keep the pod
-                        fittingRequests); // The requests to serve
-                    return true;
+                    _bestOStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerOStationForBotWithPod(_config.OutputExtendedSearchScorer),
+                        GenerateScorerOStationForBotWithPod(_config.OutputExtendedSearchScorerTieBreaker1),
+                        GenerateScorerOStationForBotWithPod(_config.OutputExtendedSearchScorerTieBreaker2));
+                }
+                if (_bestPodOStationCandidateSelector == null)
+                {
+                    _bestPodOStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerPodForOStationBot(_config.OutputPodScorer),
+                        GenerateScorerPodForOStationBot(_config.OutputPodScorerTieBreaker1),
+                        GenerateScorerPodForOStationBot(_config.OutputPodScorerTieBreaker2));
+                }
+
+                // Try another task with the current pod if there is one
+                if (bot.Pod != null)
+                {
+                    // Check for more work to do with the current combination
+                    if (AnyRelevantRequests(bot.Pod, oStation, _config.FilterForConsideration))
+                    {
+                        // Get all fitting requests
+                        List<ExtractRequest> fittingRequests = GetPossibleRequests(bot.Pod, oStation, _config.FilterForReservation);
+                        // Log
+                        Instance.LogVerbose("PC (extract): Recycling combination (" + fittingRequests.Count + " requests)");
+                        // Simply execute the next task with the pod
+                        EnqueueExtract(
+                            bot, // The bot itself
+                            oStation, // The current station
+                            bot.Pod, // Keep the pod
+                            fittingRequests); // The requests to serve
+                        return true;
+                    }
+                    else
+                    {
+                        // Look for work to do for nearby stations (if desired)
+                        if (extendSearch)
+                        {
+                            // Find best station to do the next task for
+                            OutputStation bestStation = null;
+                            _bestOStationCandidateSelector.Recycle();
+                            foreach (var station in bot.Tier.OutputStations
+                                // Limit search by distance to currently assigned station
+                                .Where(s => s != oStation && s.Tier == oStation.Tier && Distances.CalculateEuclid(oStation, s, Instance.WrongTierPenaltyDistance) <= extendedSearchRadius)
+                                // Get best station while filtering by any work to do for it
+                                .Where(s => AnyRelevantRequests(bot.Pod, s, _config.FilterForConsideration)))
+                            {
+                                // Update current candidate to assess
+                                _currentBot = bot;
+                                _currentOStation = station;
+                                // Check whether the current combination is better
+                                if (_bestOStationCandidateSelector.Reassess())
+                                {
+                                    // Update best candidate
+                                    bestStation = _currentOStation;
+                                }
+                            }
+                            // See whether there was a suitable station
+                            if (bestStation != null)
+                            {
+                                // Get all fitting requests
+                                List<ExtractRequest> fittingRequests = GetPossibleRequests(bot.Pod, bestStation, _config.FilterForReservation);
+                                // Log
+                                Instance.LogVerbose("PC (extract): Recycling pod only (" + fittingRequests.Count + " requests)");
+                                // Simply execute the next task with the pod
+                                EnqueueExtract(
+                                    bot, // The bot itself
+                                    bestStation, // The current station
+                                    bot.Pod, // Keep the pod
+                                    fittingRequests); // The requests to serve
+                                // Log score statistics
+                                if (_statOStationForPodScorerValues == null)
+                                    _statOStationForPodScorerValues = _bestOStationCandidateSelector.BestScores.ToArray();
+                                else
+                                    for (int i = 0; i < _bestOStationCandidateSelector.BestScores.Length; i++)
+                                        _statOStationForPodScorerValues[i] += _bestOStationCandidateSelector.BestScores[i];
+                                _statOStationForPodAssignments++;
+                                return true;
+                            }
+                        }
+
+                        // Pod is not useful anymore - put it away
+                        EnqueueParkPod(bot, bot.Pod, Instance.Controller.PodStorageManager.GetStorageLocation(bot.Pod));
+                        return true;
+                    }
                 }
                 else
                 {
-                    // Look for work to do for nearby stations (if desired)
-                    if (extendSearch)
+                    // Determine best pod
+                    Pod bestPod = null;
+                    _bestPodOStationCandidateSelector.Recycle();
+                    foreach (var pod in Instance.ResourceManager.UnusedPods
+                        // Get best pod while ensuring that any work can be done with it
+                        .Where(p => AnyRelevantRequests(p, oStation, _config.FilterForConsideration)))
                     {
-                        // Find best station to do the next task for
-                        OutputStation bestStation = null;
-                        _bestOStationCandidateSelector.Recycle();
-                        foreach (var station in bot.Tier.OutputStations
-                            // Limit search by distance to currently assigned station
-                            .Where(s => s != oStation && s.Tier == oStation.Tier && Distances.CalculateEuclid(oStation, s, Instance.WrongTierPenaltyDistance) <= extendedSearchRadius)
-                            // Get best station while filtering by any work to do for it
-                            .Where(s => AnyRelevantRequests(bot.Pod, s, config.FilterForConsideration)))
+                        // Update current candidate to assess
+                        _currentBot = bot;
+                        _currentOStation = oStation;
+                        _currentPod = pod;
+                        // Check whether the current combination is better
+                        if (_bestPodOStationCandidateSelector.Reassess())
                         {
-                            // Update current candidate to assess
-                            _currentBot = bot;
-                            _currentOStation = station;
-                            // Check whether the current combination is better
-                            if (_bestOStationCandidateSelector.Reassess())
+                            // Update best candidate
+                            bestPod = _currentPod;
+                        }
+                    }
+                    // See whether there was any suitable pod
+                    if (bestPod != null)
+                    {
+                        // Get all fitting requests
+                        List<ExtractRequest> fittingRequests = GetPossibleRequests(bestPod, oStation, _config.FilterForReservation);
+                        // Log
+                        Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
+                        // Simply execute the next task with the pod
+                        EnqueueExtract(
+                            bot, // The bot itself
+                            oStation, // The current station
+                            bestPod, // The new pod
+                            fittingRequests); // The requests to serve
+                        // Log score statistics
+                        if (_statPodForOStationScorerValues == null)
+                            _statPodForOStationScorerValues = _bestPodOStationCandidateSelector.BestScores.ToArray();
+                        else
+                            for (int i = 0; i < _bestPodOStationCandidateSelector.BestScores.Length; i++)
+                                _statPodForOStationScorerValues[i] += _bestPodOStationCandidateSelector.BestScores[i];
+                        _statPodForOStationAssignments++;
+                        Instance.StatCustomControllerInfo.CustomLogPC1 = _statPodForOStationScorerValues[0] / _statPodForOStationAssignments;
+                        Instance.StatCustomControllerInfo.CustomLogPC2 = _statPodForOStationScorerValues[1] / _statPodForOStationAssignments;
+                        Instance.StatCustomControllerInfo.CustomLogPC3 = _statPodForOStationScorerValues[2] / _statPodForOStationAssignments;
+                        return true;
+                    }
+                }
+
+                // Signal no task found
+                return false;
+
+            }
+            else if (config.GetType() == typeof(FullyDemandPodSelectionConfiguration))
+            {
+                var _config = config as FullyDemandPodSelectionConfiguration;
+                // Try another task with the current pod if there is one
+                if (bot.Pod != null)
+                {
+                    // Check for more work to do with the current combination
+                    if (AnyRelevantRequests(bot.Pod, oStation, _config.FilterForConsideration))
+                    {
+                        // Get all fitting requests
+                        List<ExtractRequest> fittingRequests = GetPossibleRequests(bot.Pod, oStation, _config.FilterForReservation);
+                        // Log
+                        Instance.LogVerbose("PC (extract): Recycling combination (" + fittingRequests.Count + " requests)");
+                        // Simply execute the next task with the pod
+                        EnqueueExtract(
+                            bot, // The bot itself
+                            oStation, // The current station
+                            bot.Pod, // Keep the pod
+                            fittingRequests); // The requests to serve
+                        return true;
+                    }
+                    else
+                    {
+                        // Pod is not useful anymore - put it away
+                        EnqueueParkPod(bot, bot.Pod, Instance.Controller.PodStorageManager.GetStorageLocation(bot.Pod));
+                        return true;
+                    }
+                }
+                else
+                {
+                    // check station capacity
+                    if (oStation.CapacityInUse + oStation.CapacityReserved > oStation.Capacity)
+                        return false;
+                    // init _availableNumInInBoundPods is haven't
+                    if (_availableNumInInBoundPods == null)
+                    {
+                        lastUpdateTime = this.Instance.Controller.CurrentTime;
+                        // calculate all SKUS
+                        _availableNumInInBoundPods = new VolatileIDDictionary<ItemDescription, int>(
+                            this.Instance.ItemDescriptions.Select(item => new VolatileKeyValuePair<ItemDescription, int>(item, oStation.InboundPods.Sum(pod => pod.CountAvailable(item)))).ToList()
+                        );
+                    }
+                    // init available number of items in all inbound pods if necessary
+                    if (this.Instance.Controller.CurrentTime != lastUpdateTime)
+                    {
+                        lastUpdateTime = this.Instance.Controller.CurrentTime;
+                        // only calculate SKUs in inbound pods
+                        foreach (var item in oStation.InboundPods.SelectMany(pod => pod.ItemDescriptionsContained).Distinct())
+                        {
+                            _availableNumInInBoundPods[item] = oStation.InboundPods.Sum(pod => pod.CountAvailable(item));
+                        }
+                    }
+                    // TODO token for HADOD
+                    // Determine best pod from all unused pods. 
+                    // (In Default pod selection, only pods can fulfill items in the station will be selected)
+                    int bestNumOrderFulfilled = 0;
+                    Pod bestPod = null;
+                    foreach (var pod in Instance.ResourceManager.UnusedPods)
+                    {
+                        int NumOrderFulfilled = 0;
+                        // Check all order backlog
+                        foreach (var order in this.Instance.Controller.OrderManager.pendingOrders)
+                        {
+                            // Get demand for items caused by order
+                            List<IGrouping<ItemDescription, ExtractRequest>> itemDemands = Instance.ResourceManager.GetExtractRequestsOfOrder(order).GroupBy(r => r.Item).ToList();
+                            // Check whether sufficient inventory is still available in the pod set with the new pod
+                            if (itemDemands.All(g => _availableNumInInBoundPods[g.Key] + pod.CountAvailable(g.Key) >= g.Count()))
                             {
-                                // Update best candidate
-                                bestStation = _currentOStation;
+                                NumOrderFulfilled++;
                             }
                         }
-                        // See whether there was a suitable station
-                        if (bestStation != null)
+                        if (NumOrderFulfilled > bestNumOrderFulfilled)
                         {
-                            // Get all fitting requests
-                            List<ExtractRequest> fittingRequests = GetPossibleRequests(bot.Pod, bestStation, config.FilterForReservation);
-                            // Log
-                            Instance.LogVerbose("PC (extract): Recycling pod only (" + fittingRequests.Count + " requests)");
-                            // Simply execute the next task with the pod
-                            EnqueueExtract(
-                                bot, // The bot itself
-                                bestStation, // The current station
-                                bot.Pod, // Keep the pod
-                                fittingRequests); // The requests to serve
-                            // Log score statistics
-                            if (_statOStationForPodScorerValues == null)
-                                _statOStationForPodScorerValues = _bestOStationCandidateSelector.BestScores.ToArray();
-                            else
-                                for (int i = 0; i < _bestOStationCandidateSelector.BestScores.Length; i++)
-                                    _statOStationForPodScorerValues[i] += _bestOStationCandidateSelector.BestScores[i];
-                            _statOStationForPodAssignments++;
-                            return true;
+                            bestNumOrderFulfilled = NumOrderFulfilled;
+                            bestPod = pod;
                         }
                     }
-
-                    // Pod is not useful anymore - put it away
-                    EnqueueParkPod(bot, bot.Pod, Instance.Controller.PodStorageManager.GetStorageLocation(bot.Pod));
-                    return true;
-                }
-            }
-            else
-            {
-                // Determine best pod
-                Pod bestPod = null;
-                _bestPodOStationCandidateSelector.Recycle();
-                foreach (var pod in Instance.ResourceManager.UnusedPods
-                    // Get best pod while ensuring that any work can be done with it
-                    .Where(p => AnyRelevantRequests(p, oStation, config.FilterForConsideration)))
-                {
-                    // Update current candidate to assess
-                    _currentBot = bot;
-                    _currentOStation = oStation;
-                    _currentPod = pod;
-                    // Check whether the current combination is better
-                    if (_bestPodOStationCandidateSelector.Reassess())
+                    // See whether there was any suitable pod
+                    if (bestPod != null)
                     {
-                        // Update best candidate
-                        bestPod = _currentPod;
+                        // Get all fitting requests
+                        // Note: fitting Requests might be null, but Fully-Supplied will assign new order latter,
+                        // and more extract request will be enqueued then
+                        List<ExtractRequest> fittingRequests = GetPossibleRequests(bestPod, oStation, _config.FilterForReservation);
+
+                        // Log
+                        Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
+                        // Simply execute the next task with the pod
+                        EnqueueExtract(
+                            bot, // The bot itself
+                            oStation, // The current station
+                            bestPod, // The new pod
+                            fittingRequests); // The requests to serve
+                        // Log score statistics
+                        _statPodForOStationAssignments++;
+                        Instance.StatCustomControllerInfo.CustomLogPC1 = bestNumOrderFulfilled / _statPodForOStationAssignments;
+                        Instance.StatCustomControllerInfo.CustomLogPC2 = 0;
+                        Instance.StatCustomControllerInfo.CustomLogPC3 = 0;
+                        return true;
                     }
                 }
-                // See whether there was any suitable pod
-                if (bestPod != null)
-                {
-                    // Get all fitting requests
-                    List<ExtractRequest> fittingRequests = GetPossibleRequests(bestPod, oStation, config.FilterForReservation);
-                    // Log
-                    Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
-                    // Simply execute the next task with the pod
-                    EnqueueExtract(
-                        bot, // The bot itself
-                        oStation, // The current station
-                        bestPod, // The new pod
-                        fittingRequests); // The requests to serve
-                    // Log score statistics
-                    if (_statPodForOStationScorerValues == null)
-                        _statPodForOStationScorerValues = _bestPodOStationCandidateSelector.BestScores.ToArray();
-                    else
-                        for (int i = 0; i < _bestPodOStationCandidateSelector.BestScores.Length; i++)
-                            _statPodForOStationScorerValues[i] += _bestPodOStationCandidateSelector.BestScores[i];
-                    _statPodForOStationAssignments++;
-                    Instance.StatCustomControllerInfo.CustomLogPC1 = _statPodForOStationScorerValues[0] / _statPodForOStationAssignments;
-                    Instance.StatCustomControllerInfo.CustomLogPC2 = _statPodForOStationScorerValues[1] / _statPodForOStationAssignments;
-                    Instance.StatCustomControllerInfo.CustomLogPC3 = _statPodForOStationScorerValues[2] / _statPodForOStationAssignments;
-                    return true;
-                }
-            }
 
-            // Signal no task found
-            return false;
+                // Signal no task found
+                return false;
+            }
+            else throw new ArgumentException("Unknown pod selection type: " + config.GetType().ToString());
+            
         }
 
         #endregion
@@ -1303,92 +1448,185 @@ namespace RAWSimO.Core.Control
         /// Tries to assign more additional requests to the tasks currently executed by the robots.
         /// </summary>
         /// <param name="config">The config to use.</param>
-        protected void AssignOnTheFlyWork(DefaultPodSelectionConfiguration config)
+        protected void AssignOnTheFlyWork(PodSelectionConfiguration config)
         {
-            // Check whether there is any new work to assign
-            if (!_onTheFlyExtractSituationInvestigated || !_onTheFlyStoreSituationInvestigated)
+            if (config.GetType() == typeof(DefaultPodSelectionConfiguration))
             {
-                // Search all bots for more work
-                foreach (var bot in Instance.Bots
-                    // Filter out bots for which no additional work can be added
-                    .Where(b =>
-                    {
-                        // Ensure that there is any work to do
-                        if (b.CurrentTask is ExtractTask)
-                            return
-                                // Only check, if there is any on-the-fly extract work
-                                !_onTheFlyExtractSituationInvestigated &&
-                                // Only check bots that are already carrying a pod
-                                b.Pod != null &&
-                                // Only check constellations not previously checked
-                                _outputStationHasPotentialOnTheFlyWork[(b.CurrentTask as ExtractTask).OutputStation, b] &&
-                                // Only check bots that still have requests left in their extract task
-                                (b.CurrentTask as ExtractTask).Requests.Any();
-                        // Ensure that there is any work to do
-                        else if (b.CurrentTask is InsertTask)
-                            return
-                                // Only check, if there is any on-the-fly store work
-                                !_onTheFlyStoreSituationInvestigated &&
-                                // Only check bots that are already carrying a pod
-                                b.Pod != null &&
-                                // Only check constellations not previously checked
-                                _inputStationHasPotentialOnTheFlyWork[(b.CurrentTask as InsertTask).InputStation, b] &&
-                                // Only check bots that still have requests left in their store task
-                                (b.CurrentTask as InsertTask).Requests.Any();
-                        // This bot is neither doing an extract nor a store task - ignore it
-                        else return false;
-                    })
-                    // Order bots by the distance to their respective target station
-                    .OrderBy(b =>
-                    {
-                        // Get the station the bot is going to
-                        Waypoint stationWP =
-                                b.CurrentTask is ExtractTask ? (b.CurrentTask as ExtractTask).OutputStation.Waypoint :
-                                b.CurrentTask is InsertTask ? (b.CurrentTask as InsertTask).InputStation.Waypoint :
-                                null;
-                        // Ensure that we already know the station - If not, penalize it
-                        if (stationWP == null)
-                            return double.MaxValue;
-                        // Use the shortest path to the station when bot is already queued
-                        if (b.CurrentWaypoint != null && b.CurrentWaypoint.IsQueueWaypoint)
-                            // Calculate the shortest path
-                            return Distances.CalculateShortestPathPodSafe(b.CurrentWaypoint, stationWP, Instance);
-                        else
-                            // Simply use the manhattan distance and penalize it to always prefer queued robots first
-                            return Distances.CalculateManhattan(b, stationWP, Instance.WrongTierPenaltyDistance) + Instance.WrongTierPenaltyDistance;
-                    }))
+                var _config = config as DefaultPodSelectionConfiguration;
+                // Check whether there is any new work to assign
+                if (!_onTheFlyExtractSituationInvestigated || !_onTheFlyStoreSituationInvestigated)
                 {
-                    // Add additional extract requests to the current task
-                    if (config.OnTheFlyExtract && bot.CurrentTask is ExtractTask)
+                    // Search all bots for more work
+                    foreach (var bot in Instance.Bots
+                        // Filter out bots for which no additional work can be added
+                        .Where(b =>
+                        {
+                            // Ensure that there is any work to do
+                            if (b.CurrentTask is ExtractTask)
+                                return
+                                    // Only check, if there is any on-the-fly extract work
+                                    !_onTheFlyExtractSituationInvestigated &&
+                                    // Only check bots that are already carrying a pod
+                                    b.Pod != null &&
+                                    // Only check constellations not previously checked
+                                    _outputStationHasPotentialOnTheFlyWork[(b.CurrentTask as ExtractTask).OutputStation, b] &&
+                                    // Only check bots that still have requests left in their extract task
+                                    (b.CurrentTask as ExtractTask).Requests.Any();
+                            // Ensure that there is any work to do
+                            else if (b.CurrentTask is InsertTask)
+                                return
+                                    // Only check, if there is any on-the-fly store work
+                                    !_onTheFlyStoreSituationInvestigated &&
+                                    // Only check bots that are already carrying a pod
+                                    b.Pod != null &&
+                                    // Only check constellations not previously checked
+                                    _inputStationHasPotentialOnTheFlyWork[(b.CurrentTask as InsertTask).InputStation, b] &&
+                                    // Only check bots that still have requests left in their store task
+                                    (b.CurrentTask as InsertTask).Requests.Any();
+                            // This bot is neither doing an extract nor a store task - ignore it
+                            else return false;
+                        })
+                        // Order bots by the distance to their respective target station
+                        .OrderBy(b =>
+                        {
+                            // Get the station the bot is going to
+                            Waypoint stationWP =
+                                    b.CurrentTask is ExtractTask ? (b.CurrentTask as ExtractTask).OutputStation.Waypoint :
+                                    b.CurrentTask is InsertTask ? (b.CurrentTask as InsertTask).InputStation.Waypoint :
+                                    null;
+                            // Ensure that we already know the station - If not, penalize it
+                            if (stationWP == null)
+                                return double.MaxValue;
+                            // Use the shortest path to the station when bot is already queued
+                            if (b.CurrentWaypoint != null && b.CurrentWaypoint.IsQueueWaypoint)
+                                // Calculate the shortest path
+                                return Distances.CalculateShortestPathPodSafe(b.CurrentWaypoint, stationWP, Instance);
+                            else
+                                // Simply use the manhattan distance and penalize it to always prefer queued robots first
+                                return Distances.CalculateManhattan(b, stationWP, Instance.WrongTierPenaltyDistance) + Instance.WrongTierPenaltyDistance;
+                        }))
                     {
-                        // Fetch the task
-                        ExtractTask extractTask = bot.CurrentTask as ExtractTask;
-                        // Match more items to orders of the station, if possible
-                        List<ExtractRequest> itemsToHandle = GetPossibleRequests(bot.Pod, extractTask.OutputStation, config.FilterForReservation);
-                        // Add new matches to current task
-                        foreach (var item in itemsToHandle)
-                            extractTask.AddRequest(item);
-                        // Mark situation investigated
-                        _outputStationHasPotentialOnTheFlyWork[extractTask.OutputStation, bot] = false;
+                        // Add additional extract requests to the current task
+                        if (_config.OnTheFlyExtract && bot.CurrentTask is ExtractTask)
+                        {
+                            // Fetch the task
+                            ExtractTask extractTask = bot.CurrentTask as ExtractTask;
+                            // Match more items to orders of the station, if possible
+                            List<ExtractRequest> itemsToHandle = GetPossibleRequests(bot.Pod, extractTask.OutputStation, _config.FilterForReservation);
+                            // Add new matches to current task
+                            foreach (var item in itemsToHandle)
+                                extractTask.AddRequest(item);
+                            // Mark situation investigated
+                            _outputStationHasPotentialOnTheFlyWork[extractTask.OutputStation, bot] = false;
+                        }
+                        // Add additional insert requests to the current task
+                        else if (_config.OnTheFlyStore && bot.CurrentTask is InsertTask)
+                        {
+                            // Fetch the task
+                            InsertTask storeTask = bot.CurrentTask as InsertTask;
+                            // Match more bundles to orders of the station, if possible
+                            List<InsertRequest> bundlesToHandle = GetPossibleRequests(bot.Pod, storeTask.InputStation);
+                            // Add new matches to current task
+                            foreach (var bundle in bundlesToHandle)
+                                storeTask.AddRequest(bundle);
+                            // Mark situation investigated
+                            _inputStationHasPotentialOnTheFlyWork[storeTask.InputStation, bot] = false;
+                        }
                     }
-                    // Add additional insert requests to the current task
-                    else if (config.OnTheFlyStore && bot.CurrentTask is InsertTask)
-                    {
-                        // Fetch the task
-                        InsertTask storeTask = bot.CurrentTask as InsertTask;
-                        // Match more bundles to orders of the station, if possible
-                        List<InsertRequest> bundlesToHandle = GetPossibleRequests(bot.Pod, storeTask.InputStation);
-                        // Add new matches to current task
-                        foreach (var bundle in bundlesToHandle)
-                            storeTask.AddRequest(bundle);
-                        // Mark situation investigated
-                        _inputStationHasPotentialOnTheFlyWork[storeTask.InputStation, bot] = false;
-                    }
+                    // Mark situation investigated
+                    _onTheFlyExtractSituationInvestigated = true;
+                    _onTheFlyStoreSituationInvestigated = true;
                 }
-                // Mark situation investigated
-                _onTheFlyExtractSituationInvestigated = true;
-                _onTheFlyStoreSituationInvestigated = true;
             }
+            else if (config.GetType() == typeof(FullyDemandPodSelectionConfiguration))
+            {
+                var _config = config as FullyDemandPodSelectionConfiguration;
+                // Check whether there is any new work to assign
+                if (!_onTheFlyExtractSituationInvestigated || !_onTheFlyStoreSituationInvestigated)
+                {
+                    // Search all bots for more work
+                    foreach (var bot in Instance.Bots
+                        // Filter out bots for which no additional work can be added
+                        .Where(b =>
+                        {
+                            // Ensure that there is any work to do
+                            if (b.CurrentTask is ExtractTask)
+                                return
+                                    // Only check, if there is any on-the-fly extract work
+                                    !_onTheFlyExtractSituationInvestigated &&
+                                    // Only check bots that are already carrying a pod
+                                    b.Pod != null &&
+                                    // Only check constellations not previously checked
+                                    _outputStationHasPotentialOnTheFlyWork[(b.CurrentTask as ExtractTask).OutputStation, b] &&
+                                    // Only check bots that still have requests left in their extract task
+                                    (b.CurrentTask as ExtractTask).Requests.Any();
+                            // Ensure that there is any work to do
+                            else if (b.CurrentTask is InsertTask)
+                                return
+                                    // Only check, if there is any on-the-fly store work
+                                    !_onTheFlyStoreSituationInvestigated &&
+                                    // Only check bots that are already carrying a pod
+                                    b.Pod != null &&
+                                    // Only check constellations not previously checked
+                                    _inputStationHasPotentialOnTheFlyWork[(b.CurrentTask as InsertTask).InputStation, b] &&
+                                    // Only check bots that still have requests left in their store task
+                                    (b.CurrentTask as InsertTask).Requests.Any();
+                            // This bot is neither doing an extract nor a store task - ignore it
+                            else return false;
+                        })
+                        // Order bots by the distance to their respective target station
+                        .OrderBy(b =>
+                        {
+                            // Get the station the bot is going to
+                            Waypoint stationWP =
+                                    b.CurrentTask is ExtractTask ? (b.CurrentTask as ExtractTask).OutputStation.Waypoint :
+                                    b.CurrentTask is InsertTask ? (b.CurrentTask as InsertTask).InputStation.Waypoint :
+                                    null;
+                            // Ensure that we already know the station - If not, penalize it
+                            if (stationWP == null)
+                                return double.MaxValue;
+                            // Use the shortest path to the station when bot is already queued
+                            if (b.CurrentWaypoint != null && b.CurrentWaypoint.IsQueueWaypoint)
+                                // Calculate the shortest path
+                                return Distances.CalculateShortestPathPodSafe(b.CurrentWaypoint, stationWP, Instance);
+                            else
+                                // Simply use the manhattan distance and penalize it to always prefer queued robots first
+                                return Distances.CalculateManhattan(b, stationWP, Instance.WrongTierPenaltyDistance) + Instance.WrongTierPenaltyDistance;
+                        }))
+                    {
+                        // Add additional extract requests to the current task
+                        if (_config.OnTheFlyExtract && bot.CurrentTask is ExtractTask)
+                        {
+                            // Fetch the task
+                            ExtractTask extractTask = bot.CurrentTask as ExtractTask;
+                            // Match more items to orders of the station, if possible
+                            List<ExtractRequest> itemsToHandle = GetPossibleRequests(bot.Pod, extractTask.OutputStation, _config.FilterForReservation);
+                            // Add new matches to current task
+                            foreach (var item in itemsToHandle)
+                                extractTask.AddRequest(item);
+                            // Mark situation investigated
+                            _outputStationHasPotentialOnTheFlyWork[extractTask.OutputStation, bot] = false;
+                        }
+                        // Add additional insert requests to the current task
+                        else if (_config.OnTheFlyStore && bot.CurrentTask is InsertTask)
+                        {
+                            // Fetch the task
+                            InsertTask storeTask = bot.CurrentTask as InsertTask;
+                            // Match more bundles to orders of the station, if possible
+                            List<InsertRequest> bundlesToHandle = GetPossibleRequests(bot.Pod, storeTask.InputStation);
+                            // Add new matches to current task
+                            foreach (var bundle in bundlesToHandle)
+                                storeTask.AddRequest(bundle);
+                            // Mark situation investigated
+                            _inputStationHasPotentialOnTheFlyWork[storeTask.InputStation, bot] = false;
+                        }
+                    }
+                    // Mark situation investigated
+                    _onTheFlyExtractSituationInvestigated = true;
+                    _onTheFlyStoreSituationInvestigated = true;
+                }
+            }
+            else new ArgumentException("Unknown pod selection type: " + config.GetType().ToString());
         }
 
         #endregion

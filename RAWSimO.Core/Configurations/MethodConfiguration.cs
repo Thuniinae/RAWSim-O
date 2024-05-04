@@ -280,6 +280,10 @@ namespace RAWSimO.Core.Configurations
         /// An approach exploiting information about the backlog to increase similarities of orders at the stations.
         /// </summary>
         Foresight,
+        /// <summary>
+        /// An approach exploiting information about order backlog and pods assign to the station to increase pile-on.
+        /// </summary>
+        FullySupplied,
     }
     /// <summary>
     /// All types of implemented replenishment batching strategies.
@@ -599,6 +603,12 @@ namespace RAWSimO.Core.Configurations
         }
     }
     /// <summary>
+    /// Dummy class for selection of pod selection in task allocation configs
+    /// </summary>
+    [XmlInclude(typeof(DefaultPodSelectionConfiguration))]
+    [XmlInclude(typeof(FullyDemandPodSelectionConfiguration))]
+    abstract public class PodSelectionConfiguration : ControllerConfigurationBase{}
+    /// <summary>
     /// Base class for the station activation configuration.
     /// </summary>
     [XmlInclude(typeof(ActivateAllStationActivationConfiguration))]
@@ -699,6 +709,7 @@ namespace RAWSimO.Core.Configurations
     [XmlInclude(typeof(PodMatchingOrderBatchingConfiguration))]
     [XmlInclude(typeof(LinesInCommonOrderBatchingConfiguration))]
     [XmlInclude(typeof(QueueOrderBatchingConfiguration))]
+    [XmlInclude(typeof(FullySuppliedOrderBatchingConfiguration))]
     public abstract class OrderBatchingConfiguration : ControllerConfigurationBase
     {
         /// <summary>

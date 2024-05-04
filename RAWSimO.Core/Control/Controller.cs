@@ -107,6 +107,7 @@ namespace RAWSimO.Core.Control
                 case OrderBatchingMethodType.PodMatching: OrderManager = new PodMatchingOrderManager(instance); break;
                 case OrderBatchingMethodType.LinesInCommon: OrderManager = new LinesInCommonOrderManager(instance); break;
                 case OrderBatchingMethodType.Queue: OrderManager = new QueueOrderManager(instance); break;
+                case OrderBatchingMethodType.FullySupplied: OrderManager = new FullySuppliedOrderManager(instance); break;
                 default: throw new ArgumentException("Unknown order manager: " + instance.ControllerConfig.OrderBatchingConfig.GetMethodType());
             }
             // Init replenishment batching manger

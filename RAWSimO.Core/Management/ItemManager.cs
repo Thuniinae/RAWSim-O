@@ -50,6 +50,10 @@ namespace RAWSimO.Core.Management
         /// </summary>
         private List<ItemDescription> _itemDescriptions = new List<ItemDescription>();
         /// <summary>
+        /// Pulib readonly, all possible item description. Hence, this is the complete list of all possible simulated products that can be generated.
+        /// </summary>
+        public List<ItemDescription> itemDescriptions{get => _itemDescriptions;}
+        /// <summary>
         /// The probabilities for all item-descriptions.
         /// </summary>
         private VolatileIDDictionary<ItemDescription, double> _itemDescriptionProbabilities;

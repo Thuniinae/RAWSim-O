@@ -43,6 +43,10 @@ namespace RAWSimO.Core.Control
         /// All not yet decided orders.
         /// </summary>
         protected HashSet<Order> _pendingOrders = new HashSet<Order>();
+        /// <summary>
+        /// public read only all not yet decided orders.
+        /// </summary>
+        public HashSet<Order> pendingOrders {get => _pendingOrders;}
 
         /// <summary>
         /// Indicates that the current situation has already been investigated. So that it will be ignored.
@@ -121,6 +125,11 @@ namespace RAWSimO.Core.Control
         /// </summary>
         /// <param name="station">The newly activated station.</param>
         public void SignalStationActivated(OutputStation station) { SituationInvestigated = false; }
+
+        /// <summary>
+        /// Signals Fully-Supplied order manager that new pod is assigned to station,  so new orders can be assigned
+        /// </summary>
+        public void SignalPodAssigned() { SituationInvestigated = false; }
 
         #endregion Signals
 

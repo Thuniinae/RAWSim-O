@@ -1,4 +1,5 @@
 ﻿using RAWSimO.Core.Configurations;
+using RAWSimO.Core.Control.Defaults.OrderBatching;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Geometrics;
 using RAWSimO.Core.Items;
@@ -309,6 +310,9 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
                             _config.PodSelectionConfig);
                         if (success)
                         {
+                            // New pod assigned signal, especially for Fully-Supplied Order Manager
+                            if (this.Instance.Controller.OrderManager.GetType() == typeof(FullySuppliedOrderManager))
+                                this.Instance.Controller.OrderManager.SignalPodAssigned();
                             // Keep track of who is working for whom
                             if (_workerStations[bot] != null)
                                 _stationWorkerCount[_workerStations[bot]]--;

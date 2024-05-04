@@ -353,7 +353,8 @@ namespace RAWSimO.Core.Bots
                     {
                         _appendMoveStates(CurrentWaypoint, extractTask.OutputStation.Waypoint);
                     }
-                    StateQueueEnqueue(new BotPutItems(extractTask));
+                    // ignore if there are no request, may happened in Fully-Demand pod selection
+                    if (extractTask.Requests.Count > 0) StateQueueEnqueue(new BotPutItems(extractTask));
 
                     break;
                 case BotTaskType.Rest:

@@ -195,7 +195,7 @@ namespace RAWSimO.Core.Configurations
         /// <summary>
         /// The pod selection configuration to use.
         /// </summary>
-        public DefaultPodSelectionConfiguration PodSelectionConfig = new DefaultPodSelectionConfiguration();
+        public PodSelectionConfiguration PodSelectionConfig = new DefaultPodSelectionConfiguration();
         /// <summary>
         /// The order to use when looking for a suitable resting location.
         /// </summary>
@@ -251,7 +251,7 @@ namespace RAWSimO.Core.Configurations
         /// <summary>
         /// The sub configuration for selecting the pods for picking and replenishment.
         /// </summary>
-        public DefaultPodSelectionConfiguration PodSelectionConfig = new DefaultPodSelectionConfiguration();
+        public PodSelectionConfiguration PodSelectionConfig = new DefaultPodSelectionConfiguration();
         /// <summary>
         /// The order to use when looking for a suitable resting location.
         /// </summary>
@@ -335,7 +335,7 @@ namespace RAWSimO.Core.Configurations
         /// <summary>
         /// The sub configuration for selecting the pods for picking and replenishment.
         /// </summary>
-        public DefaultPodSelectionConfiguration PodSelectionConfig = new DefaultPodSelectionConfiguration();
+        public PodSelectionConfiguration PodSelectionConfig = new DefaultPodSelectionConfiguration();
         /// <summary>
         /// The order to use when looking for a suitable resting location.
         /// </summary>
