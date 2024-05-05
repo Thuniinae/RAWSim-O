@@ -488,6 +488,9 @@ namespace RAWSimO.Visualization
 
         private static void ParseUIElement<T>(UIElement uiElement, FieldInfo fieldInfo, int fieldIndex, T parentObject)
         {
+
+            try
+            {
             // Ignore live fields
             if (fieldInfo.GetCustomAttributes(false).Any(a => a is LiveAttribute))
             {
@@ -505,9 +508,12 @@ namespace RAWSimO.Visualization
                 fieldInfo.FieldType == typeof(bool) ||
                 fieldInfo.FieldType.IsEnum)
             {
+                // check if not empty
+                if ((uiElement as WrapPanel) == null) return;
                 // Determine detailed type and parse the value
                 if (fieldInfo.FieldType == typeof(int))
                 {
+                    if ((uiElement as WrapPanel).Children[1] as TextBox == null) return;
                     // Parse the value and submit it
                     string textValue = ((uiElement as WrapPanel).Children[1] as TextBox).Text;
                     fieldInfo.SetValue(parentObject, string.IsNullOrWhiteSpace(textValue) ? 0 : int.Parse(textValue));
@@ -515,25 +521,31 @@ namespace RAWSimO.Visualization
                 }
                 if (fieldInfo.FieldType == typeof(double))
                 {
+                    if ((uiElement as WrapPanel).Children[1] as TextBox == null) return;
                     // Parse the value and submit it
                     string textValue = ((uiElement as WrapPanel).Children[1] as TextBox).Text;
-                    fieldInfo.SetValue(parentObject, string.IsNullOrWhiteSpace(textValue) ? 0 : double.Parse(textValue, IOConstants.FORMATTER));
+                    double value = 0;
+                    if (!string.IsNullOrWhiteSpace(textValue) && double.TryParse(textValue, out value))
+                        fieldInfo.SetValue(parentObject, value);
                     return;
                 }
                 if (fieldInfo.FieldType == typeof(string))
                 {
+                    if ((uiElement as WrapPanel).Children[1] as TextBox == null) return;
                     // Get the value and submit it
                     fieldInfo.SetValue(parentObject, ((uiElement as WrapPanel).Children[1] as TextBox).Text);
                     return;
                 }
                 if (fieldInfo.FieldType == typeof(bool))
                 {
+                    if ((uiElement as WrapPanel).Children[1] as CheckBox == null) return;
                     // Check the value and submit it
                     fieldInfo.SetValue(parentObject, ((uiElement as WrapPanel).Children[1] as CheckBox).IsChecked == true);
                     return;
                 }
                 if (fieldInfo.FieldType.IsEnum)
                 {
+                    if ((uiElement as WrapPanel).Children[1] as ComboBox == null) return;
                     // Check the value and submit it
                     object enumVal = Enum.Parse(fieldInfo.FieldType, fieldInfo.FieldType.GetEnumNames()[((uiElement as WrapPanel).Children[1] as ComboBox).SelectedIndex]);
                     fieldInfo.SetValue(parentObject, enumVal);
@@ -586,6 +598,8 @@ namespace RAWSimO.Visualization
 
             // We don't know this type - throw an exception
             throw new ArgumentException("Unknown field type: " + fieldInfo.FieldType.FullName);
+            }
+            catch (Exception){}
         }
 
         public static void FillParameterItems<T>(Dispatcher uiDispatcher, IList rootCollection, T rootObject)
