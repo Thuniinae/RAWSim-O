@@ -4,6 +4,7 @@ using System.Linq;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Interfaces;
 using RAWSimO.Core.Items;
+using RAWSimO.Toolbox;
 
 namespace RAWSimO.Core.Control
 {
@@ -47,6 +48,18 @@ namespace RAWSimO.Core.Control
         /// public read only all not yet decided orders.
         /// </summary>
         public HashSet<Order> pendingOrders {get => _pendingOrders;}
+        /// <summary>
+        /// All not yet decided late orders
+        /// </summary>
+        public HashSet<Order> pendingLateOrders = new HashSet<Order>();
+        /// <summary>
+        /// All not yet decided not late orders
+        /// </summary>
+        public HashSet<Order> pendingNotLateOrders = new HashSet<Order>();
+        /// <summary>
+        /// indicate total available capacity is less than late orders
+        /// </summary>
+        public bool lateOrdersEnough;
 
         /// <summary>
         /// Indicates that the current situation has already been investigated. So that it will be ignored.
@@ -170,6 +183,17 @@ namespace RAWSimO.Core.Control
                 // Mark new situation
                 SituationInvestigated = false;
             }
+
+            // assess late orders
+            pendingLateOrders = new HashSet<Order>(_pendingOrders.Where(o => o.DueTime < this.Instance.Controller.CurrentTime));
+            pendingNotLateOrders = _pendingOrders.ExceptWithNew(pendingLateOrders);
+
+            // assess for Fully-Supplied
+            if (this.Instance.OutputStations.Sum(s => s.Capacity - s.CapacityInUse - s.CapacityReserved) < pendingLateOrders.Count)
+                lateOrdersEnough = true;
+            else
+                lateOrdersEnough = false;
+
             // Decide about remaining orders
             if (!SituationInvestigated)
             {

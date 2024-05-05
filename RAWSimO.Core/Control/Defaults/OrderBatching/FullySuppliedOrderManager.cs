@@ -59,17 +59,9 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         private void Initialize()
         {
             // Set some values for statistics
-            _statFullySuppliedScoreIndex = _config.LateBeforeMatch ? 1 : 0;
+            _statFullySuppliedScoreIndex = 0;
             // --> Setup normal scorers
             List<Func<double>> normalScorers = new List<Func<double>>();
-            // Select late orders first
-            if (_config.LateBeforeMatch)
-            {
-                normalScorers.Add(() =>
-                {
-                    return _currentOrder.DueTime > Instance.Controller.CurrentTime ? 1 : 0;
-                });
-            }
             // Select best by match with inbound pods
             /*normalScorers.Add(() =>
             {
@@ -202,11 +194,14 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             }
             // Assign orders while possible
             furtherOptions = true;
-            while (furtherOptions) // loop only once in Fully-Supplied, keep it for future modification
+            // Search late orders First
+            HashSet<Order> pendingOrders = this.Instance.Controller.OrderManager.pendingLateOrders;
+            bool secondSearch = false;
+            while (furtherOptions) 
             {
-                // Prepare helpers
-                OutputStation chosenStation = null;
-                Order chosenOrder = null;
+                // search not late orders in second loop
+                if (secondSearch)
+                    pendingOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
                 // Look for next station to assign orders to
                 foreach (var station in Instance.OutputStations
                     // Station has to be valid
@@ -222,8 +217,11 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         _bestCandidateSelectNormal.Recycle();
                         // Set station
                         _currentStation = station;
+                        // Prepare helpers
+                        OutputStation chosenStation = null;
+                        Order chosenOrder = null;
                         // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                        foreach (var order in _pendingOrders.Where(o => o.Positions.All(p => {
+                        foreach (var order in pendingOrders.Where(o => o.Positions.All(p => {
                             // initialize and store result if haven't
                             if (_numItemInInboundPod[station] == null)
                                 _numItemInInboundPod[station] = new Dictionary<ItemDescription, int>(){};
@@ -247,6 +245,8 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                             // Assign the order
                             AllocateOrder(chosenOrder, chosenStation);
                             orderAssigned++;
+                            // remove from order list
+                            pendingOrders.Remove(chosenOrder);
                             // Log score statistics
                             if (_statScorerValues == null)
                                 _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
@@ -260,7 +260,23 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                             break; // no more assignment for this station.
                     }
                 }
-                furtherOptions = false;
+                if (!this.Instance.Controller.OrderManager.lateOrdersEnough)
+                {
+                    if (secondSearch) // already second search
+                    {
+                        secondSearch = false;
+                        furtherOptions = false;
+                    }
+                    else // not yet second search
+                    {
+                        secondSearch = true;
+                        furtherOptions = true;
+                    }
+                }
+                else
+                {
+                    furtherOptions = false;
+                }
             }
         }
 
