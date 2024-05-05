@@ -202,9 +202,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 // search not late orders in second loop
                 if (secondSearch)
                     pendingOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
-                // Prepare helpers
-                OutputStation chosenStation = null;
-                Order chosenOrder = null;
                 // Look for next station to assign orders to
                 foreach (var station in Instance.OutputStations
                     // Station has to be valid
@@ -220,6 +217,9 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         _bestCandidateSelectNormal.Recycle();
                         // Set station
                         _currentStation = station;
+                        // Prepare helpers
+                        OutputStation chosenStation = null;
+                        Order chosenOrder = null;
                         // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
                         foreach (var order in pendingOrders.Where(o => o.Positions.All(p => {
                             // initialize and store result if haven't
@@ -272,6 +272,10 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         secondSearch = true;
                         furtherOptions = true;
                     }
+                }
+                else
+                {
+                    furtherOptions = false;
                 }
             }
         }
