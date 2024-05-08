@@ -52,6 +52,11 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// numbers of items of inbound pods of stations
         /// </summary>
         private Dictionary<OutputStation, Dictionary<ItemDescription, int>> _numItemInInboundPod;
+        /// <summary>
+        ///  Undecided orders of Fully-Supplied Order Manager, equals to pending late/not late order
+        ///  depends on second search executed or not. 
+        /// </summary>
+        public HashSet<Order> undecidedOrders {get; private set;}
 
         /// <summary>
         /// Initializes this controller.
@@ -195,13 +200,13 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             // Assign orders while possible
             furtherOptions = true;
             // Search late orders First
-            HashSet<Order> pendingOrders = this.Instance.Controller.OrderManager.pendingLateOrders;
+            undecidedOrders = this.Instance.Controller.OrderManager.pendingLateOrders;
             bool secondSearch = false;
             while (furtherOptions) 
             {
                 // search not late orders in second loop
                 if (secondSearch)
-                    pendingOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
+                    undecidedOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
                 // Look for next station to assign orders to
                 foreach (var station in Instance.OutputStations
                     // Station has to be valid
@@ -221,7 +226,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         OutputStation chosenStation = null;
                         Order chosenOrder = null;
                         // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                        foreach (var order in pendingOrders.Where(o => o.Positions.All(p => {
+                        foreach (var order in undecidedOrders.Where(o => o.Positions.All(p => {
                             // initialize and store result if haven't
                             if (_numItemInInboundPod[station] == null)
                                 _numItemInInboundPod[station] = new Dictionary<ItemDescription, int>(){};
@@ -246,7 +251,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                             AllocateOrder(chosenOrder, chosenStation);
                             orderAssigned++;
                             // remove from order list
-                            pendingOrders.Remove(chosenOrder);
+                            undecidedOrders.Remove(chosenOrder);
                             // Log score statistics
                             if (_statScorerValues == null)
                                 _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
