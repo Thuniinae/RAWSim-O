@@ -21,7 +21,12 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// Creates a new instance of this manager.
         /// </summary>
         /// <param name="instance">The instance this manager belongs to.</param>
-        public FullySuppliedOrderManager(Instance instance) : base(instance) { _config = instance.ControllerConfig.OrderBatchingConfig as FullySuppliedOrderBatchingConfiguration; }
+        public FullySuppliedOrderManager(Instance instance) : base(instance) 
+        { 
+            _config = instance.ControllerConfig.OrderBatchingConfig as FullySuppliedOrderBatchingConfiguration; 
+            // Init
+            undecidedOrders = this._pendingOrders;
+        }
 
         /// <summary>
         /// The config of this controller.
@@ -97,7 +102,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             _bestCandidateSelectFastLane = new BestCandidateSelector(true, fastLaneScorers.ToArray());
             if (_config.FastLane)
                 _nearestInboundPod = new VolatileIDDictionary<OutputStation, Pod>(Instance.OutputStations.Select(s => new VolatileKeyValuePair<OutputStation, Pod>(s, null)).ToList());
-        
+            
             
         }
         /// <summary>
@@ -129,6 +134,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// </summary>
         protected override void DecideAboutPendingOrders()
         {
+            
             // If not initialized, do it now
             if (_bestCandidateSelectNormal == null)
                 Initialize();
@@ -177,6 +183,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     // Assign the order
                     AllocateOrder(chosenOrder, chosenStation);
+                    //System.Console.WriteLine($"allocated an order to station {chosenStation.ID}");
                     // Log fast lane assignment
                     Instance.StatCustomControllerInfo.CustomLogOB1++;
                 }
@@ -233,6 +240,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         {
                             // Assign the order
                             AllocateOrder(chosenOrder, chosenStation);
+                            //System.Console.WriteLine($"allocated an order to station {chosenStation.ID}");
                             orderAssigned++;
                             // remove from order list
                             undecidedOrders.Remove(chosenOrder);
@@ -338,10 +346,13 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 if (secondSearch)
                     undecidedOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
                     
-                int orderAssigned = 0;
+                List<Order> orderAssigned = new();
+                var possibleOrders = undecidedOrders.Where(o => o.Positions.All(p => 
+                    station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key))
+                    >= p.Value));
                 // by keeping a list of top orders
                 // Do until can't find any order or station full
-                while(station.CapacityInUse + station.CapacityReserved  + orderAssigned < station.Capacity)
+                while(station.CapacityInUse + station.CapacityReserved  + orderAssigned.Count < station.Capacity)
                 {
                     _bestCandidateSelectNormal.Recycle();
                     // Set station
@@ -350,8 +361,11 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     OutputStation chosenStation = null;
                     Order chosenOrder = null;
                     // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                    foreach (var order in undecidedOrders.Where(o => o.Positions.All(p => 
-                        station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key)) >= p.Value)))
+                    foreach (var order in possibleOrders.Where(o => o.Positions.All(p => 
+                        station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key)) 
+                        // need to subtract items from previously allocated orders
+                        - orderAssigned.Sum(order => order.GetDemandCount(p.Key)) 
+                        >= p.Value)))
                     {
                         // Set order
                         _currentOrder = order;
@@ -367,7 +381,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     {
                         // Assign the order
                         AllocateOrder(chosenOrder, chosenStation);
-                        orderAssigned++;
+                        orderAssigned.Add(chosenOrder);
                         // remove from order list
                         undecidedOrders.Remove(chosenOrder);
                         // Log score statistics
