@@ -1329,115 +1329,127 @@ namespace RAWSimO.Core.Control
             }
             else
             {
-                // check number of orders
-                if (orderManager.undecidedOrders.Count == 0)
-                    return false; // Signal no task found
-
-                // check station capacity
-                if (oStation.CapacityInUse + oStation.CapacityReserved >= oStation.Capacity)
-                    return false;
-
-                double bestNumOrderFulfilled = 1.0; // score for pod selection
-                // check if there are pod set remained
-                if (pendingPods[oStation].Count == 0)
+                foreach(var undecidedOrders in new List<HashSet<Order>>{orderManager.pendingLateOrders, orderManager.pendingNotLateOrders} )
                 {
-                    Pod bestPod = null;
-                    // Determine best pod from all unused pods. 
-                    // (In Default pod selection, only pods can fulfill items in the station will be selected)
-                    foreach (var pod in Instance.ResourceManager.UnusedPods.Except(pendingPods.SelectMany(d => d.Value).Distinct()))
+                    // search not late orders if no late order can be fulfilled
+                    // end search if no not late order can be fulfilled
+                    if (undecidedOrders.Count == 0)
                     {
-                        int NumOrderFulfilled = 0;
-                        // Check all order backlog, where sufficient inventory is still available in the pod set with the new pod
-                        foreach (var order in orderManager.undecidedOrders.Where(o => o.Positions.All(p =>
-                            oStation.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
-                        {
-                            NumOrderFulfilled++;
-                        }
-                        if (NumOrderFulfilled > bestNumOrderFulfilled)
-                        {
-                            bestNumOrderFulfilled = NumOrderFulfilled;
-                            bestPod = pod;
-                        }
+                        // don't search not late order even if station remain capacity
+                        if (orderManager.lateOrdersEnough)
+                            break; 
+                        else
+                            continue;
                     }
-                    // make sure at least one pod is assigned, 
-                    // by adding pods to an fully fulfillable order with longest stay time in backlog
-                    if (bestPod != null)
+
+                    // check station capacity
+                    if (oStation.CapacityInUse + oStation.CapacityReserved >= oStation.Capacity)
+                        break;
+
+                    double bestNumOrderFulfilled = 1.0; // score for pod selection
+                    // pick new pod or pod set if there are none
+                    if (pendingPods[oStation].Count == 0)
                     {
-                        pendingPods[oStation].Add(bestPod);
-                        Instance.ResourceManager.ClaimPod(bestPod, null, BotTaskType.None);
-                    }
-                    else
-                    { 
-                        var orders = new HashSet<Order> (orderManager.undecidedOrders);
-                        while(orders.Count > 0)
+                        Pod bestPod = null;
+                        // Determine best pod from all unused pods. 
+                        // (In Default pod selection, only pods can fulfill items in the station will be selected)
+                        foreach (var pod in Instance.ResourceManager.UnusedPods)
                         {
-                            // get an order with longest stay time in backlog i.e. first put in backlog
-                            var longestStayOrder = orders.ArgMin(o => o.TimeStamp);
-                            // store number of items needed in the order
-                            var amount = new Dictionary<ItemDescription, int>(longestStayOrder.Positions.Select(p => new KeyValuePair<ItemDescription, int>(p.Key, p.Value)));
-                            // get possible pods contained with items in the order
-                            var possiblePods = new Dictionary<ItemDescription, List<Pod>>(longestStayOrder.Positions.Select(
-                                p => new KeyValuePair<ItemDescription, List<Pod>>(p.Key, new List<Pod>(
-                                    Instance.ResourceManager.UnusedPods.Where(pod => pod.CountAvailable(p.Key) > 0)
-                                ))
-                            ));
-                            // check if the order is fulfillable
-                            if (longestStayOrder.Positions.Any(p => p.Value > possiblePods[p.Key].Sum(pod => pod.CountAvailable(p.Key))))
+                            int NumOrderFulfilled = 0;
+                            // Check all order backlog, where sufficient inventory is still available in the pod set with the new pod
+                            foreach (var order in undecidedOrders.Where(o => o.Positions.All(p =>
+                                oStation.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
                             {
-                                orders.Remove(longestStayOrder);
+                                NumOrderFulfilled++;
+                            }
+                            if (NumOrderFulfilled > bestNumOrderFulfilled)
+                            {
+                                bestNumOrderFulfilled = NumOrderFulfilled;
+                                bestPod = pod;
+                            }
+                        }
+                        // make sure at least one pod is assigned, 
+                        if (bestPod != null)
+                        {
+                            pendingPods[oStation].Add(bestPod);
+                            Instance.ResourceManager.ClaimPod(bestPod, null, BotTaskType.None);
+                        }
+                        // by adding pods to an fully fulfillable order with longest stay time in backlog
+                        else
+                        { 
+                            var orders = new HashSet<Order> (undecidedOrders);
+                            while(orders.Count > 0)
+                            {
+                                // get an order with longest stay time in backlog i.e. first put in backlog
+                                var longestStayOrder = orders.ArgMin(o => o.TimeStamp);
+                                // store number of items needed in the order
+                                var amount = new Dictionary<ItemDescription, int>(longestStayOrder.Positions.Select(p => new KeyValuePair<ItemDescription, int>(p.Key, p.Value)));
+                                // get possible pods contained with items in the order
+                                var possiblePods = new Dictionary<ItemDescription, List<Pod>>(longestStayOrder.Positions.Select(
+                                    p => new KeyValuePair<ItemDescription, List<Pod>>(p.Key, new List<Pod>(
+                                        Instance.ResourceManager.UnusedPods.Where(pod => pod.CountAvailable(p.Key) > 0)
+                                    ))
+                                ));
+                                // check if the order is fulfillable
+                                if (longestStayOrder.Positions.Any(p => p.Value > possiblePods[p.Key].Sum(pod => pod.CountAvailable(p.Key))))
+                                {
+                                    orders.Remove(longestStayOrder);
+                                    continue;
+                                }
+                                // greedy method to find best pod sets
+                                while(amount.Any(d => d.Value > 0))
+                                {
+                                    var pod = possiblePods.SelectMany(d => d.Value).Distinct().ToList().ArgMax(
+                                        p => longestStayOrder.Positions.Sum(item => amount[item.Key] == 0 ? 0 :Math.Min(amount[item.Key], p.CountAvailable(item.Key))));
+                                    pendingPods[oStation].Add(pod);
+                                    // claim all pending pod to prevent be claimed by replenishment, reposition...
+                                    // pod will be released right after leaving pending pods and become best pod
+                                    Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
+                                    // remove pod from possible pods
+                                    possiblePods.Select(d => d.Value.Remove(pod));
+                                    // update remaining amount in the order
+                                    foreach(var p in longestStayOrder.Positions.Where(p => pod.CountAvailable(p.Key) > 0))
+                                        amount[p.Key] -= Math.Min(amount[p.Key], pod.CountAvailable(p.Key));
+                                }
+                                break;
+                            }
+                            if (orders.Count == 0) // failed to find a fulfillable order
+                            {
                                 continue;
                             }
-                            // greedy method to find best pod sets
-                            while(amount.Any(d => d.Value > 0))
-                            {
-                                var pod = possiblePods.SelectMany(d => d.Value).Distinct().ToList().ArgMax(
-                                    p => longestStayOrder.Positions.Sum(item => amount[item.Key] == 0 ? 0 :Math.Min(amount[item.Key], p.CountAvailable(item.Key))));
-                                pendingPods[oStation].Add(pod);
-                                // claim all pending pod to prevent be claimed by replenishment, reposition...
-                                // pod will be released right after leaving pending pods and become best pod
-                                Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
-                                // remove pod from possible pods
-                                possiblePods.Select(d => d.Value.Remove(pod));
-                                // update remaining amount in the order
-                                foreach(var p in longestStayOrder.Positions.Where(p => pod.CountAvailable(p.Key) > 0))
-                                    amount[p.Key] -= Math.Min(amount[p.Key], pod.CountAvailable(p.Key));
-                            }
-                            break;
                         }
-                        if (orders.Count == 0) // failed to find a fulfillable order
-                        {
-                            return false;
-                        }
+                        // Fully-Supplied should be done right after any success pod selection
+                        orderManager.ExtraDecideAboutPendingOrders(oStation, pendingPods[oStation], undecidedOrders);
                     }
-                    // Fully-Supplied should be done right after any success pod selection
-                    orderManager.ExtraDecideAboutPendingOrders(oStation, pendingPods[oStation]);
+                    
+                    Pod selectedPod = pendingPods[oStation].First();
+                    bestNumOrderFulfilled /= pendingPods[oStation].Count; // pod set has lower score
+                    pendingPods[oStation].Remove(selectedPod);
+                    // release pod for later extract request
+                    Instance.ResourceManager.ReleasePod(selectedPod);
+
+                    // Get all fitting requests
+                    // Note: fitting Requests might be null, but Fully-Supplied will assign new order latter,
+                    // and more extract request will be enqueued then
+                    List<ExtractRequest> fittingRequests = GetPossibleRequests(selectedPod, oStation, config.FilterForReservation);
+
+                    // Log
+                    Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
+                    // Simply execute the next task with the pod
+                    EnqueueExtract(
+                        bot, // The bot itself
+                        oStation, // The current station
+                        selectedPod, // The new pod
+                        fittingRequests); // The requests to serve
+                    // Log score statistics
+                    _statPodForOStationAssignments++;
+                    Instance.StatCustomControllerInfo.CustomLogPC1 = bestNumOrderFulfilled / _statPodForOStationAssignments;
+                    Instance.StatCustomControllerInfo.CustomLogPC2 = 0;
+                    Instance.StatCustomControllerInfo.CustomLogPC3 = 0;
+                    return true;
                 }
-                
-                Pod selectedPod = pendingPods[oStation].First();
-                bestNumOrderFulfilled /= pendingPods[oStation].Count; // pod set has lower score
-                pendingPods[oStation].Remove(selectedPod);
-                // release pod for later extract request
-                Instance.ResourceManager.ReleasePod(selectedPod);
-
-                // Get all fitting requests
-                // Note: fitting Requests might be null, but Fully-Supplied will assign new order latter,
-                // and more extract request will be enqueued then
-                List<ExtractRequest> fittingRequests = GetPossibleRequests(selectedPod, oStation, config.FilterForReservation);
-
-                // Log
-                Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
-                // Simply execute the next task with the pod
-                EnqueueExtract(
-                    bot, // The bot itself
-                    oStation, // The current station
-                    selectedPod, // The new pod
-                    fittingRequests); // The requests to serve
-                // Log score statistics
-                _statPodForOStationAssignments++;
-                Instance.StatCustomControllerInfo.CustomLogPC1 = bestNumOrderFulfilled / _statPodForOStationAssignments;
-                Instance.StatCustomControllerInfo.CustomLogPC2 = 0;
-                Instance.StatCustomControllerInfo.CustomLogPC3 = 0;
-                return true;
+                // can't assign any pod
+                return false;
             }
     }
         

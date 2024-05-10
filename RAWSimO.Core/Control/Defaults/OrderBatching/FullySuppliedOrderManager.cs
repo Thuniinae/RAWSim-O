@@ -24,8 +24,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         public FullySuppliedOrderManager(Instance instance) : base(instance) 
         { 
             _config = instance.ControllerConfig.OrderBatchingConfig as FullySuppliedOrderBatchingConfiguration; 
-            // Init
-            undecidedOrders = this._pendingOrders;
         }
 
         /// <summary>
@@ -53,11 +51,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         private OutputStation _currentStation = null;
         private Order _currentOrder = null;
         private VolatileIDDictionary<OutputStation, Pod> _nearestInboundPod;
-        /// <summary>
-        ///  Undecided orders of Fully-Supplied Order Manager, equals to pending late/not late order
-        ///  depends on second search executed or not. 
-        /// </summary>
-        public HashSet<Order> undecidedOrders {get; private set;}
 
         /// <summary>
         /// Initializes this controller.
@@ -133,7 +126,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// Hence, set the field accordingly to react on events not tracked by this outer skeleton.
         /// </summary>
         protected override void DecideAboutPendingOrders()
-        {
+        {/*
             
             // If not initialized, do it now
             if (_bestCandidateSelectNormal == null)
@@ -275,14 +268,14 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     furtherOptions = false;
                 }
             }
-        }
+        */}
 
         /// <summary>
         /// This is an extra call to decide about potentially pending orders in Fully-Supplied POA.
         /// Will consider a new pod that are about to assigned to the station.
         /// This method is not being timed, should only be called in other timed function (ex: Pod Selection)
         /// </summary>
-        public void ExtraDecideAboutPendingOrders(OutputStation station, List<Pod> newPods)
+        public void ExtraDecideAboutPendingOrders(OutputStation station, List<Pod> newPods, HashSet<Order> undecidedOrders)
         {
             // If not initialized, do it now
             if (_bestCandidateSelectNormal == null)
@@ -335,85 +328,57 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     furtherOptions = false;
                 }
             }
+            
             // Assign orders while possible
-            furtherOptions = true;
-            // Search late orders First
-            undecidedOrders = this.Instance.Controller.OrderManager.pendingLateOrders;
-            bool secondSearch = false;
-            while (furtherOptions) 
+            List<Order> orderAssigned = new();
+            var possibleOrders = undecidedOrders.Where(o => o.Positions.All(p => 
+                station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key))
+                >= p.Value));
+            // by keeping a list of top orders
+            // Do until can't find any order or station full
+            while(station.CapacityInUse + station.CapacityReserved  + orderAssigned.Count < station.Capacity)
             {
-                // search not late orders in second loop
-                if (secondSearch)
-                    undecidedOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
-                    
-                List<Order> orderAssigned = new();
-                var possibleOrders = undecidedOrders.Where(o => o.Positions.All(p => 
-                    station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key))
-                    >= p.Value));
-                // by keeping a list of top orders
-                // Do until can't find any order or station full
-                while(station.CapacityInUse + station.CapacityReserved  + orderAssigned.Count < station.Capacity)
+                _bestCandidateSelectNormal.Recycle();
+                // Set station
+                _currentStation = station;
+                // Prepare helpers
+                OutputStation chosenStation = null;
+                Order chosenOrder = null;
+                // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
+                foreach (var order in possibleOrders.Where(o => o.Positions.All(p => 
+                    station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key)) 
+                    // need to subtract items from previously allocated orders
+                    - orderAssigned.Sum(order => order.GetDemandCount(p.Key)) 
+                    >= p.Value)))
                 {
-                    _bestCandidateSelectNormal.Recycle();
-                    // Set station
-                    _currentStation = station;
-                    // Prepare helpers
-                    OutputStation chosenStation = null;
-                    Order chosenOrder = null;
-                    // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                    foreach (var order in possibleOrders.Where(o => o.Positions.All(p => 
-                        station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key)) 
-                        // need to subtract items from previously allocated orders
-                        - orderAssigned.Sum(order => order.GetDemandCount(p.Key)) 
-                        >= p.Value)))
+                    // Set order
+                    _currentOrder = order;
+                    // --> Assess combination
+                    if (_bestCandidateSelectNormal.Reassess())
                     {
-                        // Set order
-                        _currentOrder = order;
-                        // --> Assess combination
-                        if (_bestCandidateSelectNormal.Reassess())
-                        {
-                            chosenStation = _currentStation;
-                            chosenOrder = _currentOrder;
-                        }
+                        chosenStation = _currentStation;
+                        chosenOrder = _currentOrder;
                     }
-                    // Assign best order if available
-                    if (chosenOrder != null)
-                    {
-                        // Assign the order
-                        AllocateOrder(chosenOrder, chosenStation);
-                        orderAssigned.Add(chosenOrder);
-                        // remove from order list
-                        undecidedOrders.Remove(chosenOrder);
-                        // Log score statistics
-                        if (_statScorerValues == null)
-                            _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
-                        else
-                            for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
-                                _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
-                        _statAssignments++;
-                        Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
-                    }
-                    else
-                        break; // no more assignment for this station.
                 }
-                
-                if (!this.Instance.Controller.OrderManager.lateOrdersEnough)
+                // Assign best order if available
+                if (chosenOrder != null)
                 {
-                    if (secondSearch) // already second search
-                    {
-                        secondSearch = false;
-                        furtherOptions = false;
-                    }
-                    else // not yet second search
-                    {
-                        secondSearch = true;
-                        furtherOptions = true;
-                    }
+                    // Assign the order
+                    AllocateOrder(chosenOrder, chosenStation);
+                    orderAssigned.Add(chosenOrder);
+                    // remove from order list
+                    undecidedOrders.Remove(chosenOrder);
+                    // Log score statistics
+                    if (_statScorerValues == null)
+                        _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
+                    else
+                        for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
+                            _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
+                    _statAssignments++;
+                    Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
                 }
                 else
-                {
-                    furtherOptions = false;
-                }
+                    break; // no more assignment for this station.
             }
         }
 
