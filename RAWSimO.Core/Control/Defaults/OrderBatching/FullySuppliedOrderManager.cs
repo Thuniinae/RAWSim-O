@@ -49,10 +49,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         private Order _currentOrder = null;
         private VolatileIDDictionary<OutputStation, Pod> _nearestInboundPod;
         /// <summary>
-        /// numbers of items of inbound pods of stations
-        /// </summary>
-        private Dictionary<OutputStation, Dictionary<ItemDescription, int>> _numItemInInboundPod;
-        /// <summary>
         ///  Undecided orders of Fully-Supplied Order Manager, equals to pending late/not late order
         ///  depends on second search executed or not. 
         /// </summary>
@@ -124,9 +120,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     });
                 }
             }
-            // delete number of items in previous cycle
-            foreach (var station in Instance.OutputStations)
-                _numItemInInboundPod[station]?.Clear();
         }
 
         /// <summary>
@@ -139,10 +132,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             // If not initialized, do it now
             if (_bestCandidateSelectNormal == null)
                 Initialize();
-            // Initialize if haven't
-            if (_numItemInInboundPod == null)
-                _numItemInInboundPod = new Dictionary<OutputStation, Dictionary<ItemDescription, int>>(
-                    Instance.OutputStations.Select(s => new KeyValuePair<OutputStation, Dictionary<ItemDescription, int>>(s, null)).ToList());
 
             // Define filter functions
             Func<OutputStation, bool> validStationNormalAssignment = _config.FastLane ? (Func<OutputStation, bool>)IsAssignableKeepFastLaneSlot : IsAssignable;
@@ -226,14 +215,9 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         OutputStation chosenStation = null;
                         Order chosenOrder = null;
                         // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                        foreach (var order in undecidedOrders.Where(o => o.Positions.All(p => {
-                            // initialize and store result if haven't
-                            if (_numItemInInboundPod[station] == null)
-                                _numItemInInboundPod[station] = new Dictionary<ItemDescription, int>(){};
-                            if (!_numItemInInboundPod[station].ContainsKey(p.Key))
-                                _numItemInInboundPod[station].Add(p.Key, station.InboundPods.Sum(pod => pod.CountAvailable(p.Key)));
-                            return _numItemInInboundPod[station][p.Key] >= p.Value;
-                        })))
+                        foreach (var order in undecidedOrders.Where(o => o.Positions.All(p => 
+                            station.CountAvailable(p.Key) >= p.Value
+                        )))
                         {
                             // Set order
                             _currentOrder = order;
@@ -265,6 +249,140 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                             break; // no more assignment for this station.
                     }
                 }
+                if (!this.Instance.Controller.OrderManager.lateOrdersEnough)
+                {
+                    if (secondSearch) // already second search
+                    {
+                        secondSearch = false;
+                        furtherOptions = false;
+                    }
+                    else // not yet second search
+                    {
+                        secondSearch = true;
+                        furtherOptions = true;
+                    }
+                }
+                else
+                {
+                    furtherOptions = false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// This is an extra call to decide about potentially pending orders in Fully-Supplied POA.
+        /// Will consider a new pod that are about to assigned to the station.
+        /// This method is not being timed, should only be called in other timed function (ex: Pod Selection)
+        /// </summary>
+        public void ExtraDecideAboutPendingOrders(OutputStation station, List<Pod> newPods)
+        {
+            // If not initialized, do it now
+            if (_bestCandidateSelectNormal == null)
+                Initialize();
+
+            // Define filter functions
+            Func<OutputStation, bool> validStationNormalAssignment = _config.FastLane ? (Func<OutputStation, bool>)IsAssignableKeepFastLaneSlot : IsAssignable;
+            Func<OutputStation, bool> validStationFastLaneAssignment = IsAssignable;
+            // Get some meta info
+            PrepareAssessment();
+            // Assign fast lane orders while possible
+            bool furtherOptions = true;
+            while (furtherOptions && _config.FastLane)
+            {
+                // Prepare helpers
+                OutputStation chosenStation = null;
+                Order chosenOrder = null;
+                _bestCandidateSelectFastLane.Recycle();
+                // Set station
+                _currentStation = station;
+                // Check whether there is a suitable pod
+                if (_nearestInboundPod[station] != null && _nearestInboundPod[station].GetDistance(station) < Instance.SettingConfig.Tolerance)
+                {
+                    // Search for best order for the station in all fulfillable orders
+                    foreach (var order in _pendingOrders.Where(o =>
+                        // Order needs to be immediately fulfillable
+                        o.Positions.All(p => _nearestInboundPod[station].CountAvailable(p.Key) >= p.Value)))
+                    {
+                        // Set order
+                        _currentOrder = order;
+                        // --> Assess combination
+                        if (_bestCandidateSelectFastLane.Reassess())
+                        {
+                            chosenStation = _currentStation;
+                            chosenOrder = _currentOrder;
+                        }
+                    }
+                }
+                // Assign best order if available
+                if (chosenOrder != null)
+                {
+                    // Assign the order
+                    AllocateOrder(chosenOrder, chosenStation);
+                    // Log fast lane assignment
+                    Instance.StatCustomControllerInfo.CustomLogOB1++;
+                }
+                else
+                {
+                    // No more options to assign orders to stations
+                    furtherOptions = false;
+                }
+            }
+            // Assign orders while possible
+            furtherOptions = true;
+            // Search late orders First
+            undecidedOrders = this.Instance.Controller.OrderManager.pendingLateOrders;
+            bool secondSearch = false;
+            while (furtherOptions) 
+            {
+                // search not late orders in second loop
+                if (secondSearch)
+                    undecidedOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
+                    
+                int orderAssigned = 0;
+                // by keeping a list of top orders
+                // Do until can't find any order or station full
+                while(station.CapacityInUse + station.CapacityReserved  + orderAssigned < station.Capacity)
+                {
+                    _bestCandidateSelectNormal.Recycle();
+                    // Set station
+                    _currentStation = station;
+                    // Prepare helpers
+                    OutputStation chosenStation = null;
+                    Order chosenOrder = null;
+                    // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
+                    foreach (var order in undecidedOrders.Where(o => o.Positions.All(p => 
+                        station.CountAvailable(p.Key) + newPods.Sum(pod => pod.CountAvailable(p.Key)) >= p.Value)))
+                    {
+                        // Set order
+                        _currentOrder = order;
+                        // --> Assess combination
+                        if (_bestCandidateSelectNormal.Reassess())
+                        {
+                            chosenStation = _currentStation;
+                            chosenOrder = _currentOrder;
+                        }
+                    }
+                    // Assign best order if available
+                    if (chosenOrder != null)
+                    {
+                        // Assign the order
+                        AllocateOrder(chosenOrder, chosenStation);
+                        orderAssigned++;
+                        // remove from order list
+                        undecidedOrders.Remove(chosenOrder);
+                        // Log score statistics
+                        if (_statScorerValues == null)
+                            _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
+                        else
+                            for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
+                                _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
+                        _statAssignments++;
+                        Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
+                    }
+                    else
+                        break; // no more assignment for this station.
+                }
+                
                 if (!this.Instance.Controller.OrderManager.lateOrdersEnough)
                 {
                     if (secondSearch) // already second search

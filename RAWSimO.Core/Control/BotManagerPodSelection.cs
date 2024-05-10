@@ -67,14 +67,6 @@ namespace RAWSimO.Core.Control
         /// </summary>
         private VolatileIDDictionary<ItemDescription, int> _availableCounts;
         /// <summary>
-        /// Stores the available numbers of items per SKU in all inbound pods to stations.
-        /// </summary>
-        private VolatileIDDictionary<ItemDescription, int> _availableNumInInBoundPods;
-        /// <summary>
-        /// The time when last DoExtractTask is executed.
-        /// </summary>
-        private double lastUpdateTime = -1.0;
-        /// <summary>
         /// Initializes some fields for pod selection.
         /// </summary>
         private void InitPodSelection()
@@ -1342,55 +1334,24 @@ namespace RAWSimO.Core.Control
                     return false; // Signal no task found
 
                 // check station capacity
-                if (oStation.CapacityInUse + oStation.CapacityReserved > oStation.Capacity)
+                if (oStation.CapacityInUse + oStation.CapacityReserved >= oStation.Capacity)
                     return false;
 
-                Pod bestPod = null;
-                double bestNumOrderFulfilled = 0; // score for pod selection
+                double bestNumOrderFulfilled = 1.0; // score for pod selection
                 // check if there are pod set remained
-                if (pendingPods[oStation].Count > 0)
+                if (pendingPods[oStation].Count == 0)
                 {
-                    bestPod = pendingPods[oStation].First();
-                    bestNumOrderFulfilled = 1 / pendingPods[oStation].Count;
-                    pendingPods[oStation].Remove(bestPod);
-                }
-                else
-                {
-                    // init _availableNumInInBoundPods is haven't
-                    if (_availableNumInInBoundPods == null)
-                    {
-                        // calculate all SKUS
-                        _availableNumInInBoundPods = new VolatileIDDictionary<ItemDescription, int>(
-                            this.Instance.ItemDescriptions.Select(item => new VolatileKeyValuePair<ItemDescription, int>(item, oStation.InboundPods.Sum(pod => pod.CountAvailable(item)))).ToList()
-                        );
-                    }
-                    // init available number of items in all inbound pods if necessary
-                    lastUpdateTime = this.Instance.Controller.CurrentTime;
-                    if (this.Instance.Controller.CurrentTime != lastUpdateTime)
-                    {
-                        lastUpdateTime = this.Instance.Controller.CurrentTime;
-                        // only calculate SKUs in inbound pods
-                        foreach (var item in oStation.InboundPods.SelectMany(pod => pod.ItemDescriptionsContained).Distinct())
-                        {
-                            _availableNumInInBoundPods[item] = oStation.InboundPods.Sum(pod => pod.CountAvailable(item));
-                        }
-                    }
-                    // TODO token for HADOD
+                    Pod bestPod = null;
                     // Determine best pod from all unused pods. 
                     // (In Default pod selection, only pods can fulfill items in the station will be selected)
                     foreach (var pod in Instance.ResourceManager.UnusedPods.Except(pendingPods.SelectMany(d => d.Value).Distinct()))
                     {
                         int NumOrderFulfilled = 0;
-                        // Check all order backlog
-                        foreach (var order in orderManager.undecidedOrders)
+                        // Check all order backlog, where sufficient inventory is still available in the pod set with the new pod
+                        foreach (var order in orderManager.undecidedOrders.Where(o => o.Positions.All(p =>
+                            oStation.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
                         {
-                            // Get demand for items caused by order
-                            List<IGrouping<ItemDescription, ExtractRequest>> itemDemands = Instance.ResourceManager.GetExtractRequestsOfOrder(order).GroupBy(r => r.Item).ToList();
-                            // Check whether sufficient inventory is still available in the pod set with the new pod
-                            if (itemDemands.All(g => _availableNumInInBoundPods[g.Key] + pod.CountAvailable(g.Key) >= g.Count()))
-                            {
-                                NumOrderFulfilled++;
-                            }
+                            NumOrderFulfilled++;
                         }
                         if (NumOrderFulfilled > bestNumOrderFulfilled)
                         {
@@ -1400,7 +1361,12 @@ namespace RAWSimO.Core.Control
                     }
                     // make sure at least one pod is assigned, 
                     // by adding pods to an fully fulfillable order with longest stay time in backlog
-                    if (bestPod == null)
+                    if (bestPod != null)
+                    {
+                        pendingPods[oStation].Add(bestPod);
+                        Instance.ResourceManager.ClaimPod(bestPod, null, BotTaskType.None);
+                    }
+                    else
                     { 
                         var orders = new HashSet<Order> (orderManager.undecidedOrders);
                         while(orders.Count > 0)
@@ -1412,7 +1378,7 @@ namespace RAWSimO.Core.Control
                             // get possible pods contained with items in the order
                             var possiblePods = new Dictionary<ItemDescription, List<Pod>>(longestStayOrder.Positions.Select(
                                 p => new KeyValuePair<ItemDescription, List<Pod>>(p.Key, new List<Pod>(
-                                    Instance.ResourceManager.UnusedPods.Except(pendingPods.SelectMany(d => d.Value).Distinct()).Where(pod => pod.CountAvailable(p.Key) > 0)
+                                    Instance.ResourceManager.UnusedPods.Where(pod => pod.CountAvailable(p.Key) > 0)
                                 ))
                             ));
                             // check if the order is fulfillable
@@ -1427,15 +1393,15 @@ namespace RAWSimO.Core.Control
                                 var pod = possiblePods.SelectMany(d => d.Value).Distinct().ToList().ArgMax(
                                     p => longestStayOrder.Positions.Sum(item => amount[item.Key] == 0 ? 0 :Math.Min(amount[item.Key], p.CountAvailable(item.Key))));
                                 pendingPods[oStation].Add(pod);
+                                // claim all pending pod to prevent be claimed by replenishment, reposition...
+                                // pod will be released right after leaving pending pods and become best pod
+                                Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
                                 // remove pod from possible pods
                                 possiblePods.Select(d => d.Value.Remove(pod));
                                 // update remaining amount in the order
                                 foreach(var p in longestStayOrder.Positions.Where(p => pod.CountAvailable(p.Key) > 0))
                                     amount[p.Key] -= Math.Min(amount[p.Key], pod.CountAvailable(p.Key));
                             }
-                            bestPod = pendingPods[oStation].First();
-                            bestNumOrderFulfilled = 1 / pendingPods[oStation].Count;
-                            pendingPods[oStation].Remove(bestPod);
                             break;
                         }
                         if (orders.Count == 0) // failed to find a fulfillable order
@@ -1443,13 +1409,20 @@ namespace RAWSimO.Core.Control
                             return false;
                         }
                     }
+                    // Fully-Supplied should be done right after any success pod selection
+                    orderManager.ExtraDecideAboutPendingOrders(oStation, pendingPods[oStation]);
                 }
                 
+                Pod selectedPod = pendingPods[oStation].First();
+                bestNumOrderFulfilled /= pendingPods[oStation].Count; // pod set has lower score
+                pendingPods[oStation].Remove(selectedPod);
+                // release pod for later extract request
+                Instance.ResourceManager.ReleasePod(selectedPod);
 
                 // Get all fitting requests
                 // Note: fitting Requests might be null, but Fully-Supplied will assign new order latter,
                 // and more extract request will be enqueued then
-                List<ExtractRequest> fittingRequests = GetPossibleRequests(bestPod, oStation, config.FilterForReservation);
+                List<ExtractRequest> fittingRequests = GetPossibleRequests(selectedPod, oStation, config.FilterForReservation);
 
                 // Log
                 Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
@@ -1457,7 +1430,7 @@ namespace RAWSimO.Core.Control
                 EnqueueExtract(
                     bot, // The bot itself
                     oStation, // The current station
-                    bestPod, // The new pod
+                    selectedPod, // The new pod
                     fittingRequests); // The requests to serve
                 // Log score statistics
                 _statPodForOStationAssignments++;
