@@ -2,10 +2,12 @@
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
+using RAWSimO.Core.Management;
 using RAWSimO.Core.Metrics;
 using RAWSimO.Toolbox;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -21,7 +23,10 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// Creates a new instance of this manager.
         /// </summary>
         /// <param name="instance">The instance this manager belongs to.</param>
-        public FullySuppliedOrderManager(Instance instance) : base(instance) { _config = instance.ControllerConfig.OrderBatchingConfig as FullySuppliedOrderBatchingConfiguration; }
+        public FullySuppliedOrderManager(Instance instance) : base(instance) 
+        { 
+            _config = instance.ControllerConfig.OrderBatchingConfig as FullySuppliedOrderBatchingConfiguration; 
+        }
 
         /// <summary>
         /// The config of this controller.
@@ -48,10 +53,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         private OutputStation _currentStation = null;
         private Order _currentOrder = null;
         private VolatileIDDictionary<OutputStation, Pod> _nearestInboundPod;
-        /// <summary>
-        /// numbers of items of inbound pods of stations
-        /// </summary>
-        private Dictionary<OutputStation, Dictionary<ItemDescription, int>> _numItemInInboundPod;
 
         /// <summary>
         /// Initializes this controller.
@@ -96,7 +97,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             _bestCandidateSelectFastLane = new BestCandidateSelector(true, fastLaneScorers.ToArray());
             if (_config.FastLane)
                 _nearestInboundPod = new VolatileIDDictionary<OutputStation, Pod>(Instance.OutputStations.Select(s => new VolatileKeyValuePair<OutputStation, Pod>(s, null)).ToList());
-        
+            
             
         }
         /// <summary>
@@ -119,9 +120,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     });
                 }
             }
-            // delete number of items in previous cycle
-            foreach (var station in Instance.OutputStations)
-                _numItemInInboundPod[station]?.Clear();
         }
 
         /// <summary>
@@ -131,51 +129,50 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// </summary>
         protected override void DecideAboutPendingOrders()
         {
+            // do nothing
+        }
+
+        /// <summary>
+        /// This is called to decide about potentially pending orders.
+        /// This method is being timed for statistical purposes and is also ONLY called when <code>SituationInvestigated</code> is <code>false</code>.
+        /// Hence, set the field accordingly to react on events not tracked by this outer skeleton.
+        /// </summary>
+        public void FullySupplied(OutputStation station, HashSet<Order> undecidedOrders)
+        {
             // If not initialized, do it now
             if (_bestCandidateSelectNormal == null)
                 Initialize();
-            // Initialize if haven't
-            if (_numItemInInboundPod == null)
-                _numItemInInboundPod = new Dictionary<OutputStation, Dictionary<ItemDescription, int>>(
-                    Instance.OutputStations.Select(s => new KeyValuePair<OutputStation, Dictionary<ItemDescription, int>>(s, null)).ToList());
 
-            // Define filter functions
-            Func<OutputStation, bool> validStationNormalAssignment = _config.FastLane ? (Func<OutputStation, bool>)IsAssignableKeepFastLaneSlot : IsAssignable;
-            Func<OutputStation, bool> validStationFastLaneAssignment = IsAssignable;
-            // Get some meta info
-            PrepareAssessment();
-            // Assign fast lane orders while possible
-            bool furtherOptions = true;
-            while (furtherOptions && _config.FastLane)
+            Dictionary<Pod, List<ExtractRequest>> requests = 
+                new(station.InboundPods.Select(p => new KeyValuePair<Pod, List<ExtractRequest>>(p, new())));
+
+            // remained items in station and pod
+            var stationRemain = new Dictionary<Pod, Dictionary<ItemDescription, int>>(
+                station.InboundPods.ToDictionary(p => p, 
+                p => p.ItemDescriptionsContained.ToDictionary(i => i, i => p.CountAvailable(i))));
+
+            // Do until can't find any order or station full
+            while(station.CapacityInUse + station.CapacityReserved < station.Capacity)
             {
+                _bestCandidateSelectNormal.Recycle();
+                // Set station
+                _currentStation = station;
                 // Prepare helpers
                 OutputStation chosenStation = null;
                 Order chosenOrder = null;
-                _bestCandidateSelectFastLane.Recycle();
-                // Look for next station to assign orders to
-                foreach (var station in Instance.OutputStations
-                    // Station has to be valid
-                    .Where(s => validStationFastLaneAssignment(s)))
+                // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
+                foreach (var order in undecidedOrders)
                 {
-                    // Set station
-                    _currentStation = station;
-                    // Check whether there is a suitable pod
-                    if (_nearestInboundPod[station] != null && _nearestInboundPod[station].GetDistance(station) < Instance.SettingConfig.Tolerance)
+                    if (order.Positions.Any(p => 
+                        stationRemain.Values.Sum(d => d.ContainsKey(p.Key)? d[p.Key]: 0) < p.Value))
+                        continue;
+                    // Set order
+                    _currentOrder = order;
+                    // --> Assess combination
+                    if (_bestCandidateSelectNormal.Reassess())
                     {
-                        // Search for best order for the station in all fulfillable orders
-                        foreach (var order in _pendingOrders.Where(o =>
-                            // Order needs to be immediately fulfillable
-                            o.Positions.All(p => _nearestInboundPod[station].CountAvailable(p.Key) >= p.Value)))
-                        {
-                            // Set order
-                            _currentOrder = order;
-                            // --> Assess combination
-                            if (_bestCandidateSelectFastLane.Reassess())
-                            {
-                                chosenStation = _currentStation;
-                                chosenOrder = _currentOrder;
-                            }
-                        }
+                        chosenStation = _currentStation;
+                        chosenOrder = _currentOrder;
                     }
                 }
                 // Assign best order if available
@@ -183,103 +180,266 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     // Assign the order
                     AllocateOrder(chosenOrder, chosenStation);
-                    // Log fast lane assignment
-                    Instance.StatCustomControllerInfo.CustomLogOB1++;
-                }
-                else
-                {
-                    // No more options to assign orders to stations
-                    furtherOptions = false;
-                }
-            }
-            // Assign orders while possible
-            furtherOptions = true;
-            // Search late orders First
-            HashSet<Order> pendingOrders = this.Instance.Controller.OrderManager.pendingLateOrders;
-            bool secondSearch = false;
-            while (furtherOptions) 
-            {
-                // search not late orders in second loop
-                if (secondSearch)
-                    pendingOrders = this.Instance.Controller.OrderManager.pendingNotLateOrders;
-                // Look for next station to assign orders to
-                foreach (var station in Instance.OutputStations
-                    // Station has to be valid
-                    .Where(s => validStationNormalAssignment(s)))
-                {
-                    
-                    int orderAssigned = 0;
-                    // TO DO: time complexity can be improve: n*O(n) -> O(n),
-                    // by keeping a list of top orders
-                    // Do until can't find any order or station full
-                    while(station.CapacityInUse + station.CapacityReserved  + orderAssigned < station.Capacity)
+                    Instance.LogVerbose($"Fully-supplied order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
+                    // remove from order list
+                    undecidedOrders.Remove(chosenOrder);
+                    // calculate extract request
+                    var requireRequests = Instance.ResourceManager.GetExtractRequestsOfOrder(chosenOrder).
+                        GroupBy(r => r.Item).ToDictionary(g => g.Key, g => g.ToList());
+                    foreach(var item in requireRequests.Keys)
                     {
-                        _bestCandidateSelectNormal.Recycle();
-                        // Set station
-                        _currentStation = station;
-                        // Prepare helpers
-                        OutputStation chosenStation = null;
-                        Order chosenOrder = null;
-                        // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                        foreach (var order in pendingOrders.Where(o => o.Positions.All(p => {
-                            // initialize and store result if haven't
-                            if (_numItemInInboundPod[station] == null)
-                                _numItemInInboundPod[station] = new Dictionary<ItemDescription, int>(){};
-                            if (!_numItemInInboundPod[station].ContainsKey(p.Key))
-                                _numItemInInboundPod[station].Add(p.Key, station.InboundPods.Sum(pod => pod.CountAvailable(p.Key)));
-                            return _numItemInInboundPod[station][p.Key] >= p.Value;
-                        })))
+                        // take from inbound pod of station first
+                        foreach(var pod in station.InboundPods)
                         {
-                            // Set order
-                            _currentOrder = order;
-                            // --> Assess combination
-                            if (_bestCandidateSelectNormal.Reassess())
+                            if (stationRemain[pod].ContainsKey(item))
                             {
-                                chosenStation = _currentStation;
-                                chosenOrder = _currentOrder;
+                                int takeStation = Math.Min(requireRequests[item].Count(), stationRemain[pod][item]);
+                                stationRemain[pod][item] -= takeStation;
+                                requests[pod].AddRange(requireRequests[item].GetRange(0, takeStation));
+                                requireRequests[item].RemoveRange(0, takeStation);
                             }
                         }
-                        // Assign best order if available
-                        if (chosenOrder != null)
-                        {
-                            // Assign the order
-                            AllocateOrder(chosenOrder, chosenStation);
-                            orderAssigned++;
-                            // remove from order list
-                            pendingOrders.Remove(chosenOrder);
-                            // Log score statistics
-                            if (_statScorerValues == null)
-                                _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
-                            else
-                                for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
-                                    _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
-                            _statAssignments++;
-                            Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
-                        }
-                        else
-                            break; // no more assignment for this station.
                     }
-                }
-                if (!this.Instance.Controller.OrderManager.lateOrdersEnough)
-                {
-                    if (secondSearch) // already second search
-                    {
-                        secondSearch = false;
-                        furtherOptions = false;
-                    }
-                    else // not yet second search
-                    {
-                        secondSearch = true;
-                        furtherOptions = true;
-                    }
+                    // check if the order can be fulfilled
+                    if (requireRequests.Values.Any(v => v.Count > 0))
+                        throw new Exception("Order selected can't be fulfilled");
+                    // Log score statistics
+                    if (_statScorerValues == null)
+                        _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
+                    else
+                        for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
+                            _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
+                    _statAssignments++;
+                    Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
                 }
                 else
-                {
-                    furtherOptions = false;
-                }
+                    break; // no more assignment for this station.
             }
+            // Add station requests to task of the bot carrying the pod
+            foreach(var pod in station.InboundPods)
+            {
+                Instance.Controller.BotManager.AddExtract(pod, requests[pod]);
+                foreach(var r in requests[pod])
+                {
+                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
+                }
+                requests.Remove(pod);
+            }
+            // check if all station requests are registered
+            if (requests.Keys.Count > 0)
+                throw new Exception("Remained unregister items");
         }
 
+        /// <summary>
+        /// Fully-Supplied POA that will allocate orders, by a Fully-Demand pod that are about to assigned to the station.
+        /// Notes: 1. orders decided will be remove from undecided orders. 
+        /// 2. This method is not being timed, should only be called in other timed function (ex: Pod Selection)
+        /// </summary>
+        /// <param name="station"></param>
+        /// <param name="newPod"></param>
+        /// <param name="undecidedOrders"></param>
+        /// <param name="possibleOrders"></param>
+        /// <returns>A list of extract request for the new pod</returns>
+        public List<ExtractRequest> ExtraDecideAboutPendingOrders(OutputStation station, Pod newPod, HashSet<Order> undecidedOrders, List<Order> possibleOrders)
+        {
+            // If not initialized, do it now
+            if (_bestCandidateSelectNormal == null)
+                Initialize();
+
+            List<ExtractRequest> requests = new();
+            Dictionary<Pod, List<ExtractRequest>> stationRequests = 
+                new(station.InboundPods.Select(p => new KeyValuePair<Pod, List<ExtractRequest>>(p, new())));
+            // remained items in station and pod
+            var stationRemain = new Dictionary<Pod, Dictionary<ItemDescription, int>>(
+                station.InboundPods.ToDictionary(p => p, 
+                p => p.ItemDescriptionsContained.ToDictionary(i => i, i => p.CountAvailable(i))));
+            var podRemain = new Dictionary<ItemDescription, int>(
+                newPod.ItemDescriptionsContained.ToDictionary(i =>i, i => newPod.CountAvailable(i)));
+
+            // Do until can't find any order or station full
+            while(station.CapacityInUse + station.CapacityReserved < station.Capacity)
+            {
+                _bestCandidateSelectNormal.Recycle();
+                // Set station
+                _currentStation = station;
+                // Prepare helpers
+                OutputStation chosenStation = null;
+                Order chosenOrder = null;
+                // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
+                foreach (var order in undecidedOrders)
+                {
+                    if (order.Positions.Any(p => 
+                    stationRemain.Values.Sum(d => d.ContainsKey(p.Key)? d[p.Key]: 0)
+                    + (podRemain.ContainsKey(p.Key)? podRemain[p.Key] : 0) < p.Value))
+                        continue;
+                    // Set order
+                    _currentOrder = order;
+                    // --> Assess combination
+                    if (_bestCandidateSelectNormal.Reassess())
+                    {
+                        chosenStation = _currentStation;
+                        chosenOrder = _currentOrder;
+                    }
+                }
+                // Assign best order if available
+                if (chosenOrder != null)
+                {
+                    // Assign the order
+                    AllocateOrder(chosenOrder, chosenStation);
+                    Instance.LogVerbose($"single pod {newPod.ID}'s order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})\n"))}");
+                    // remove from order list
+                    undecidedOrders.Remove(chosenOrder);
+                    // calculate extract request
+                    var requireRequests = Instance.ResourceManager.GetExtractRequestsOfOrder(chosenOrder).
+                        GroupBy(r => r.Item).ToDictionary(g => g.Key, g => g.ToList());
+                    foreach(var item in requireRequests.Keys)
+                    {
+                        // take from inbound pod of station first
+                        foreach(var pod in station.InboundPods)
+                        {
+                            if (stationRemain[pod].ContainsKey(item))
+                            {
+                                int takeStation = Math.Min(requireRequests[item].Count(), stationRemain[pod][item]);
+                                stationRemain[pod][item] -= takeStation;
+                                stationRequests[pod].AddRange(requireRequests[item].GetRange(0, takeStation));
+                                requireRequests[item].RemoveRange(0, takeStation);
+                            }
+                        }
+                        // then take from pod
+                        if(podRemain.ContainsKey(item))
+                        {
+                            int takePod = Math.Min(requireRequests[item].Count, podRemain[item]);
+                            podRemain[item] -= takePod;
+                            requests.AddRange(requireRequests[item].GetRange(0, takePod));
+                            requireRequests[item].RemoveRange(0, takePod);
+                        }
+                    }
+                    // check if the order can be fulfilled
+                    if (requireRequests.Values.Any(v => v.Count > 0))
+                        throw new Exception("Order selected can't be fulfilled");
+                    // check number of remaining item in pod and station
+                    if (podRemain.Values.Any(v => v < 0) || stationRemain.Values.Any(v => v.Values.Any(v1 => v1 < 0)))
+                        throw new Exception("Remain negative number of item in pod or station.");
+                    // Log score statistics
+                    if (_statScorerValues == null)
+                        _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
+                    else
+                        for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
+                            _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
+                    _statAssignments++;
+                    Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
+                }
+                else
+                    break; // no more assignment for this station.
+            }
+            // Add station requests to task of the bot carrying the pod
+            foreach(var pod in station.InboundPods)
+            {
+                Instance.Controller.BotManager.AddExtract(pod, stationRequests[pod]);
+                foreach(var r in stationRequests[pod])
+                {
+                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
+                }
+                //stationRequests.Remove(pod);
+            }
+            if (requests.Count == 0){
+                foreach(var order in possibleOrders)
+                    System.Console.WriteLine($"order: {string.Join(", ", order.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
+                foreach(var pod in station.InboundPods)
+                {
+                    System.Console.WriteLine($"request: {string.Join(", ", stationRequests[pod].Select(r => r.Item.ID))}");
+                }
+                System.Console.WriteLine($"pod {newPod.ID}: {string.Join(",", newPod.ItemDescriptionsContained.Select(i => $"{i.ID}({newPod.CountAvailable(i)})"))}");
+                throw new Exception($"No order can be assigned to pod {newPod.ID}!");
+            }
+            return requests;
+        }
+        /// <summary>
+        /// Fully-Supplied POA when pod-set is needed to fulfilled a single order.
+        /// Notes: 1. necessary order will be remove from undecided orders. 
+        /// 2. This method is not being timed, should only be called in other timed function (ex: Pod Selection)
+        /// </summary>
+        /// <param name="station"></param>
+        /// <param name="newPods"></param>
+        /// <param name="undecidedOrders"></param>
+        /// <param name="necessaryOrder"></param>
+        /// <returns>Dictionary of pods' extract Request.</returns>
+        public Dictionary<Pod, List<ExtractRequest>> ExtraDecideAboutPendingOrder(OutputStation station, List<Pod> newPods, HashSet<Order> undecidedOrders, Order necessaryOrder)
+        {
+            // If not initialized, do it now
+            if (_bestCandidateSelectNormal == null)
+                Initialize();
+            // Get some meta info
+            PrepareAssessment();
+            // only for score statistics
+            _currentOrder = necessaryOrder;
+            _currentStation = station;
+            _bestCandidateSelectNormal.Reassess();
+
+            // Init
+            Dictionary<Pod, List<ExtractRequest>> requests = 
+                new(newPods.Select(p => new KeyValuePair<Pod, List<ExtractRequest>>(p, new())));
+            Dictionary<Pod, List<ExtractRequest>> stationRequests = 
+                new(station.InboundPods.Select(p => new KeyValuePair<Pod, List<ExtractRequest>>(p, new())));
+
+            if (necessaryOrder != null)
+            {
+                // Assign the order
+                AllocateOrder(necessaryOrder, station);
+                Instance.LogVerbose($"pod set's order: {string.Join(", ", necessaryOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
+                // remove from order list
+                undecidedOrders.Remove(necessaryOrder);
+                // calculate extract request
+                var requireRequests = Instance.ResourceManager.GetExtractRequestsOfOrder(necessaryOrder).
+                    GroupBy(r => r.Item).ToDictionary(g => g.Key, g => g.ToList());
+                
+                foreach(var item in requireRequests.Keys)
+                {
+                    // take from station first
+                    foreach(var pod in station.InboundPods)
+                    {
+                        int takeStation = Math.Min(requireRequests[item].Count, pod.CountAvailable(item));
+                        stationRequests[pod].AddRange(requireRequests[item].GetRange(0, takeStation));
+                        requireRequests[item].RemoveRange(0, takeStation);
+                    }
+                    // then take from new pods
+                    foreach(var pod in newPods)
+                    {
+                        int takePod = Math.Min(requireRequests[item].Count, pod.CountAvailable(item));
+                        requests[pod].AddRange(requireRequests[item].GetRange(0, takePod));
+                        requireRequests[item].RemoveRange(0, takePod);
+                    }
+                }
+                
+                // check if there are remain
+                if (requireRequests.Any(d => d.Value.Count > 0))
+                    throw new Exception("necessary order can't be fulfilled by new pod set and available item in inbound pod to the station");
+                
+                // Log score statistics
+                if (_statScorerValues == null)
+                    _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
+                else
+                    for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
+                        _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
+                _statAssignments++;
+                Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
+            }
+            else
+                throw new Exception("necessary order is null!");
+
+            // Add station requests to task of the bot carrying the pod
+            foreach(var pod in station.InboundPods)
+            {
+                Instance.Controller.BotManager.AddExtract(pod, stationRequests[pod]);
+                foreach(var r in stationRequests[pod])
+                {
+                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
+                }
+                //stationRequests.Remove(pod);
+            }
+
+            return requests;
+        }
         #region IOptimize Members
 
         /// <summary>

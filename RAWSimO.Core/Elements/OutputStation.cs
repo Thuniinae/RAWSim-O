@@ -377,6 +377,13 @@ namespace RAWSimO.Core.Elements
         /// All pods currently approaching the station.
         /// </summary>
         internal IEnumerable<Pod> InboundPods { get { return _inboundPods; } }
+        /// <summary>
+        /// Number of items available in inbound pods of the station.
+        /// </summary>
+        public int CountAvailable(ItemDescription item)
+        {
+            return _inboundPods.Sum(pod => pod.CountAvailable(item));   
+        }
 
         /// <summary>
         /// All extract tasks that are currently carried out by robots for this station.

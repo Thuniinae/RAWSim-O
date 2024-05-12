@@ -262,9 +262,10 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
         /// <param name="bot">The bot to get a task for.</param>
         protected override void GetNextTask(Bot bot)
         {
+            Instance.LogVerbose("get next task");
             // Search all stations only if no resting or repositioning is intended for the robot
             if (// Ensure robot is not set for resting
-                (_botStations.ContainsKey(bot) && _botStations[bot] != null) &&
+                _botStations.ContainsKey(bot) && _botStations[bot] != null &&
                 // Ensure robot is not set for repositioning
                 !_repositioningBots.Contains(bot))
             {
@@ -310,9 +311,6 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
                             _config.PodSelectionConfig);
                         if (success)
                         {
-                            // New pod assigned signal, especially for Fully-Supplied Order Manager
-                            if (this.Instance.Controller.OrderManager.GetType() == typeof(FullySuppliedOrderManager))
-                                this.Instance.Controller.OrderManager.SignalPodAssigned();
                             // Keep track of who is working for whom
                             if (_workerStations[bot] != null)
                                 _stationWorkerCount[_workerStations[bot]]--;

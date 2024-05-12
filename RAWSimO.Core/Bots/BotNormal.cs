@@ -15,6 +15,7 @@ using System.Text;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Metrics;
 using RAWSimO.Toolbox;
+using RAWSimO.Core.Management;
 
 namespace RAWSimO.Core.Bots
 {
@@ -93,6 +94,14 @@ namespace RAWSimO.Core.Bots
         /// </summary>
         /// <param name="state">The state to enqueue.</param>
         private void StateQueueEnqueue(IBotState state) { _stateQueue.Enqueue(state); _currentInfoStateName = _stateQueue.Peek().ToString(); }
+        /// <summary>
+        /// Enqueues a state that is extract task
+        /// </summary>
+        /// <param name="task"></param>
+        public void StateQueueEnqueueExtract(ExtractTask task)
+        {
+            StateQueueEnqueue(new BotPutItems(task));
+        }
         /// <summary>
         /// Dequeues the next state from the state queue.
         /// </summary>
@@ -353,8 +362,7 @@ namespace RAWSimO.Core.Bots
                     {
                         _appendMoveStates(CurrentWaypoint, extractTask.OutputStation.Waypoint);
                     }
-                    // ignore if there are no request, may happened in Fully-Demand pod selection
-                    if (extractTask.Requests.Count > 0) StateQueueEnqueue(new BotPutItems(extractTask));
+                    StateQueueEnqueue(new BotPutItems(extractTask));
 
                     break;
                 case BotTaskType.Rest:
