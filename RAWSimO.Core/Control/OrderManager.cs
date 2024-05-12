@@ -49,11 +49,11 @@ namespace RAWSimO.Core.Control
         /// </summary>
         public HashSet<Order> pendingOrders {get => _pendingOrders;}
         /// <summary>
-        /// All not yet decided late orders
+        /// All not yet decided late orders in ascending order of arrival time
         /// </summary>
         public HashSet<Order> pendingLateOrders = new HashSet<Order>();
         /// <summary>
-        /// All not yet decided not late orders
+        /// All not yet decided not late orders in ascending order of arrival time
         /// </summary>
         public HashSet<Order> pendingNotLateOrders = new HashSet<Order>();
         /// <summary>
@@ -185,7 +185,7 @@ namespace RAWSimO.Core.Control
             }
 
             // assess late orders
-            pendingLateOrders = new HashSet<Order>(_pendingOrders.Where(o => o.DueTime < this.Instance.Controller.CurrentTime));
+            pendingLateOrders = new HashSet<Order>(_pendingOrders.Where(o => o.DueTime < this.Instance.Controller.CurrentTime).OrderBy(o => o.TimeStamp));
             pendingNotLateOrders = _pendingOrders.ExceptWithNew(pendingLateOrders);
 
             // assess for Fully-Supplied

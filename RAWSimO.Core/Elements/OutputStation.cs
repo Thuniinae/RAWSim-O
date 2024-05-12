@@ -380,17 +380,9 @@ namespace RAWSimO.Core.Elements
         /// <summary>
         /// Number of items available in inbound pods of the station.
         /// </summary>
-        private Dictionary<ItemDescription, int> _available = new();
-
-        /// <summary>
-        /// Number of items available in inbound pods of the station.
-        /// </summary>
         public int CountAvailable(ItemDescription item)
         {
-            if (_available.ContainsKey(item))
-                return _available[item];
-            else
-                return 0;
+            return _inboundPods.Sum(pod => pod.CountAvailable(item));   
         }
 
         /// <summary>
@@ -613,16 +605,6 @@ namespace RAWSimO.Core.Elements
         /// <param name="currentTime">The time to update to.</param>
         public void Update(double lastTime, double currentTime)
         {
-            // update number of available items in inbound pods pf the station
-            foreach(var item in _inboundPods.SelectMany(p => p.ItemDescriptionsContained).Distinct())
-            {
-                if (!_available.ContainsKey(item))
-                {
-                    _available[item] = 0;
-                }
-                _available[item] = _inboundPods.Sum(p => p.CountAvailable(item));
-            }
-            
             // Track time the station is available for assignments (active)
             if (_lastActiveMeasurement < currentTime)
             {
