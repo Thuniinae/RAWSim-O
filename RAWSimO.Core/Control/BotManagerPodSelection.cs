@@ -1292,6 +1292,7 @@ namespace RAWSimO.Core.Control
         /// /// <returns>true if bot has a new extract task or is just parking the pod, false if it is doing a rest task.</returns>
         private bool doExtractTaskForStation(Bot bot, OutputStation oStation, bool extendSearch, double extendedSearchRadius, FullyDemandPodSelectionConfiguration config)
         {
+            Instance.LogVerbose("do extract task fo station");
             // check order manager
             if (Instance.Controller.OrderManager.GetType() != typeof(FullySuppliedOrderManager))
                 throw new ArgumentException("Unknown order manager type for Fully-Demand Pod Selection: " + Instance.Controller.OrderManager.GetType().ToString());
@@ -1311,6 +1312,7 @@ namespace RAWSimO.Core.Control
             {
                 // Pod is not useful anymore - put it away
                 EnqueueParkPod(bot, bot.Pod, Instance.Controller.PodStorageManager.GetStorageLocation(bot.Pod));
+                Instance.LogVerbose("Park pod.");
                 return true;
             }
             else
@@ -1480,9 +1482,10 @@ namespace RAWSimO.Core.Control
                     return true;
                 }
                 // can't assign any pod
+                Instance.LogVerbose("failed finding extract task");
                 return false;
             }
-    }
+        }
         
         #endregion
 

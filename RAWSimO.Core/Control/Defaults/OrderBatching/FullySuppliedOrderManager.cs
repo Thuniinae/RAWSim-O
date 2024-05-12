@@ -7,6 +7,7 @@ using RAWSimO.Core.Metrics;
 using RAWSimO.Toolbox;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -179,6 +180,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     // Assign the order
                     AllocateOrder(chosenOrder, chosenStation);
+                    Instance.LogVerbose($"Fully-supplied order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
                     // remove from order list
                     undecidedOrders.Remove(chosenOrder);
                     // calculate extract request
@@ -213,12 +215,13 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 else
                     break; // no more assignment for this station.
             }
-            // register all items in orders to inbound pods
-            foreach(var pod in requests.Keys)
+            // Add station requests to task of the bot carrying the pod
+            foreach(var pod in station.InboundPods)
             {
+                Instance.Controller.BotManager.AddExtract(pod, requests[pod]);
                 foreach(var r in requests[pod])
                 {
-                    pod.RegisterItem(r.Item, r);
+                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
                 }
                 requests.Remove(pod);
             }
@@ -235,6 +238,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// <param name="station"></param>
         /// <param name="newPod"></param>
         /// <param name="undecidedOrders"></param>
+        /// <param name="possibleOrders"></param>
         /// <returns>A list of extract request for the new pod</returns>
         public List<ExtractRequest> ExtraDecideAboutPendingOrders(OutputStation station, Pod newPod, HashSet<Order> undecidedOrders, List<Order> possibleOrders)
         {
@@ -282,6 +286,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     // Assign the order
                     AllocateOrder(chosenOrder, chosenStation);
+                    Instance.LogVerbose($"single pod {newPod.ID}'s order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})\n"))}");
                     // remove from order list
                     undecidedOrders.Remove(chosenOrder);
                     // calculate extract request
@@ -327,12 +332,13 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 else
                     break; // no more assignment for this station.
             }
-            // register all items in orders to inbound pods
+            // Add station requests to task of the bot carrying the pod
             foreach(var pod in station.InboundPods)
             {
+                Instance.Controller.BotManager.AddExtract(pod, stationRequests[pod]);
                 foreach(var r in stationRequests[pod])
                 {
-                    pod.RegisterItem(r.Item, r);
+                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
                 }
                 //stationRequests.Remove(pod);
             }
@@ -373,11 +379,14 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             // Init
             Dictionary<Pod, List<ExtractRequest>> requests = 
                 new(newPods.Select(p => new KeyValuePair<Pod, List<ExtractRequest>>(p, new())));
+            Dictionary<Pod, List<ExtractRequest>> stationRequests = 
+                new(station.InboundPods.Select(p => new KeyValuePair<Pod, List<ExtractRequest>>(p, new())));
 
             if (necessaryOrder != null)
             {
                 // Assign the order
                 AllocateOrder(necessaryOrder, station);
+                Instance.LogVerbose($"pod set's order: {string.Join(", ", necessaryOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
                 // remove from order list
                 undecidedOrders.Remove(necessaryOrder);
                 // calculate extract request
@@ -390,9 +399,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     foreach(var pod in station.InboundPods)
                     {
                         int takeStation = Math.Min(requireRequests[item].Count, pod.CountAvailable(item));
-                        // register items in the order to the inbound pod
-                        foreach(var r in requireRequests[item].GetRange(0, takeStation))
-                            pod.RegisterItem(r.Item, r);
+                        stationRequests[pod].AddRange(requireRequests[item].GetRange(0, takeStation));
                         requireRequests[item].RemoveRange(0, takeStation);
                     }
                     // then take from new pods
@@ -419,18 +426,20 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             }
             else
                 throw new Exception("necessary order is null!");
+
+            // Add station requests to task of the bot carrying the pod
+            foreach(var pod in station.InboundPods)
+            {
+                Instance.Controller.BotManager.AddExtract(pod, stationRequests[pod]);
+                foreach(var r in stationRequests[pod])
+                {
+                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
+                }
+                //stationRequests.Remove(pod);
+            }
+
             return requests;
         }
-        /// <summary>
-        /// Immediately submits the order to the station.
-        /// </summary>
-        /// <param name="order">The order that is going to be allocated.</param>
-        /// <param name="station">The station the order is assigned to.</param>
-        public void ExtraAllocateOrder(Order order, OutputStation station)
-        {
-            AllocateOrder(order, station);
-        }
-
         #region IOptimize Members
 
         /// <summary>

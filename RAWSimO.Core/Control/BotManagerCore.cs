@@ -73,6 +73,42 @@ namespace RAWSimO.Core.Control
             _lastTaskEnqueued[bot] = task;
         }
         /// <summary>
+        /// Add extract requests to a bot's task and register items in the pod carried by the bot
+        /// </summary>
+        /// <param name="pod"></param>
+        /// <param name="requests"></param>
+        /// <exception cref="Exception"></exception>
+        public void AddExtract(Pod pod, List<ExtractRequest> requests)
+        {
+            if (requests.Count == 0)
+                return;
+            // find the bot with the pod in tasks
+            bool success = false;
+            foreach(var t in _taskQueues.Values)
+            {
+                if(t.Type == BotTaskType.Extract)
+                {
+                    ExtractTask task = t as ExtractTask;
+                    if (task.ReservedPod == pod)
+                    {
+                        success = true;
+                        BotNormal bot = task.Bot as BotNormal;
+                        bot.StateQueueEnqueueExtract(new ExtractTask(Instance, bot, pod, task.OutputStation, requests));
+                        //task.Requests.AddRange(requests); not useful
+                        foreach(var r in requests)
+                        {
+                            Instance.ResourceManager.RemoveExtractRequest(r);
+                            pod.RegisterItem(r.Item, r);
+                        }
+                        break;
+                    }
+                }
+            }
+            if (!success)
+                throw new Exception("can not find bot with the pod in tasks.");
+            
+        }
+        /// <summary>
         /// Enqueues an insertion task.
         /// </summary>
         /// <param name="bot">The bot that shall execute the task.</param>
