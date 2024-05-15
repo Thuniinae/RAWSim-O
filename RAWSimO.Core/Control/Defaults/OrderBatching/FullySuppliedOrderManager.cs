@@ -129,7 +129,13 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// </summary>
         protected override void DecideAboutPendingOrders()
         {
-            // do nothing
+            foreach(var station in Instance.OutputStations)
+            {
+                foreach(var undecidedOrders in new List<HashSet<Order>>{pendingLateOrders, pendingNotLateOrders} )
+                {
+                    FullySupplied(station, undecidedOrders);
+                }
+            }
         }
 
         /// <summary>
