@@ -262,7 +262,6 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
         /// <param name="bot">The bot to get a task for.</param>
         protected override void GetNextTask(Bot bot)
         {
-            Instance.LogVerbose("get next task");
             // Search all stations only if no resting or repositioning is intended for the robot
             if (// Ensure robot is not set for resting
                 _botStations.ContainsKey(bot) && _botStations[bot] != null &&
