@@ -149,7 +149,7 @@ namespace RAWSimO.Core.Elements
             if (_itemDescriptionCountContained == null)
                 InitPodContentInfo();
             if (_itemDescriptionCountAvailable[item] <= 0)
-                throw new InvalidOperationException("Cannot reserve an item for picking, if there is none left of the kind!");
+                throw new InvalidOperationException($"Cannot reserve an item {item.ID} for picking, if there is none left of the kind!");
             _itemDescriptionCountAvailable[item]--;
             _extractRequestsRegistered.Add(extractRequest);
             extractRequest.Assign(this);
@@ -182,6 +182,15 @@ namespace RAWSimO.Core.Elements
             if (_itemDescriptionCountAvailable[item] <= 0)
                 throw new InvalidOperationException("Cannot reserve an item for picking, if there is none left of the kind!");
             _itemDescriptionCountAvailable[item]--;
+        }
+
+        /// <summary>
+        /// Reserves an item that is going to be picked at a station.
+        /// </summary>
+        /// <param name="item">The item that is going to be reserved for picking.</param>
+        internal void JustUnregisterItem(ItemDescription item)
+        {
+            _itemDescriptionCountAvailable[item]++;
         }
 
         /// <summary>

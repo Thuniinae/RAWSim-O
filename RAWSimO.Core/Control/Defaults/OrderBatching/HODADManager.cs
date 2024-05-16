@@ -47,6 +47,10 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// </summary>
         private VolatileIDDictionary<ItemDescription, int> _availableCounts;
         /// <summary>
+        /// 开始执行分配决策的工作站空闲容量的阈值
+        /// </summary>
+        private int _ThresholdValue = 1;
+        /// <summary>
         /// Initializes some fields for pod selection.
         /// </summary>
         private void InitPodSelection()
@@ -457,12 +461,15 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                             // Match fitting items with requests
                             List<ExtractRequest> requestsToHandleofAll = new List<ExtractRequest>();
                             IEnumerable<ExtractRequest> itemDemands = Instance.ResourceManager.GetExtractRequestsOfOrder(chosenOrder);
+                            Instance.LogVerbose($"Allocate order:  {string.Join(", ", chosenOrder.Positions.Select(p => $"{p.Key.ID}({p.Value})"))} at {chosenOrder.TimeStamp}");
                             int i = 0;
                             // Get current content of the pod
                             if (BestPodsbyS.Count == 0)
                             {
+                                Instance.LogVerbose("pod set empty!");
                                 foreach (var pod in Ns[chosenStation].OrderBy(v => v.Value).Select(s => s.Key))
                                 {
+                                    Instance.LogVerbose($"Pod {pod.ID}: {string.Join(", ", pod.ItemDescriptionsContained.Select(i => $"{i.ID}({pod.CountAvailable(i)})"))}");
                                     if (itemDemands.Where(v => !requestsToHandleofAll.Contains(v)).Any(g => pod.IsAvailable(g.Item)))
                                     {
                                         // Get all fitting requests
@@ -478,11 +485,13 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                                             Instance.ResourceManager._Ziops1[chosenStation][pod].AddRange(fittingRequests);
                                         else
                                             Instance.ResourceManager._Ziops1[chosenStation].Add(pod, fittingRequests);
+                                        Instance.LogVerbose($"Register items for pod {pod.ID} in inbound pods: {string.Join(", ", fittingRequests.Select(r => r.Item.ID))} from {string.Join(", ", chosenOrder.Positions.Select(p => $"{p.Key.ID}({p.Value})"))}");
                                     }
                                 }
                             }
                             else
                             {
+                                Instance.LogVerbose("pod set not empty");
                                 foreach (var pod in BestPodsbyS)
                                 {
                                     if (itemDemands.Where(v => !requestsToHandleofAll.Contains(v)).Any(g => pod.IsAvailable(g.Item)))
@@ -500,6 +509,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                                             Instance.ResourceManager._Ziops1[chosenStation][pod].AddRange(fittingRequests);
                                         else
                                             Instance.ResourceManager._Ziops1[chosenStation].Add(pod, fittingRequests);
+                                        Instance.LogVerbose($"Register items for pod {pod.ID} in pod set: {string.Join(", ", fittingRequests.Select(r => r.Item.ID))}");
                                     }
                                 }
                                 BestPodsbyS.Clear();
@@ -507,6 +517,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
 
                             if (i != itemDemands.Count())
                             {
+                                Instance.LogVerbose("Deal with remained items");
                                 foreach (var pod in Ns[chosenStation].OrderBy(v => v.Value).Select(s => s.Key))
                                 {
                                     if (itemDemands.Where(v => !requestsToHandleofAll.Contains(v)).Any(g => pod.IsAvailable(g.Item)))
@@ -524,9 +535,10 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                                             Instance.ResourceManager._Ziops1[chosenStation][pod].AddRange(fittingRequests);
                                         else
                                             Instance.ResourceManager._Ziops1[chosenStation].Add(pod, fittingRequests);
+                                        Instance.LogVerbose($"Register items for pod {pod.ID} in inbound pods: {string.Join(", ", fittingRequests.Select(r => r.Item.ID))}");
                                     }
                                 }
-                                //throw new InvalidOperationException("order 无法满足!");
+                                throw new InvalidOperationException("order 无法满足!");
                             }
                         }
                         else
@@ -702,12 +714,16 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// </summary>
         protected override void DecideAboutPendingOrders()
         {
+            //获取每个station的可用容量
+            GenerateCs();
+            if (!Cs.Any(v => v.Value > _ThresholdValue - 1))
+                return;
             if (Instance.ControllerConfig.TaskAllocationConfig.GetType() != typeof(BalancedTaskAllocationConfiguration))
                 throw new Exception("HODAD must be used with Balanced Task Allocation!");
             var balancedTAConfig = Instance.ControllerConfig.TaskAllocationConfig as BalancedTaskAllocationConfiguration;
-            if (balancedTAConfig.PodSelectionConfig.GetType() != typeof(DefaultPodSelectionConfiguration))
-                throw new Exception("HODAD must be used with Default Pod Selection!");
-            var podSelectConfig = balancedTAConfig.PodSelectionConfig as DefaultPodSelectionConfiguration;
+            if (balancedTAConfig.PodSelectionConfig.GetType() != typeof(HADODPodSelectionConfiguration))
+                throw new Exception("HODAD must be used with HADOD Pod Selection!");
+            var podSelectConfig = balancedTAConfig.PodSelectionConfig as HADODPodSelectionConfiguration;
                                    
             // If not initialized, do it now
             if (_bestCandidateSelectNormal == null)

@@ -222,7 +222,6 @@ namespace RAWSimO.Core.Control
             // Decide about remaining orders
             if (!SituationInvestigated)
             {
-                GenerateCs();
                 // Measure time for decision
                 DateTime before = DateTime.Now;
                 // Do the actual work
