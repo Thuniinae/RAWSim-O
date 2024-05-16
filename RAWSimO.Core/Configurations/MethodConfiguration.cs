@@ -284,6 +284,10 @@ namespace RAWSimO.Core.Configurations
         /// An approach exploiting information about order backlog and pods assign to the station to increase pile-on.
         /// </summary>
         FullySupplied,
+        /// <summary>
+        /// Use HADOD method to solve POA
+        /// </summary>
+        HADOD,
     }
     /// <summary>
     /// All types of implemented replenishment batching strategies.
@@ -607,6 +611,7 @@ namespace RAWSimO.Core.Configurations
     /// </summary>
     [XmlInclude(typeof(DefaultPodSelectionConfiguration))]
     [XmlInclude(typeof(FullyDemandPodSelectionConfiguration))]
+    [XmlInclude(typeof(HADODPodSelectionConfiguration))]
     [XmlInclude(typeof(SimulatedAnnealingPodSelectionConfiguration))]
     abstract public class PodSelectionConfiguration : ControllerConfigurationBase{}
     /// <summary>
@@ -711,6 +716,7 @@ namespace RAWSimO.Core.Configurations
     [XmlInclude(typeof(LinesInCommonOrderBatchingConfiguration))]
     [XmlInclude(typeof(QueueOrderBatchingConfiguration))]
     [XmlInclude(typeof(FullySuppliedOrderBatchingConfiguration))]
+    [XmlInclude(typeof(HADODConfiguration))]
     public abstract class OrderBatchingConfiguration : ControllerConfigurationBase
     {
         /// <summary>

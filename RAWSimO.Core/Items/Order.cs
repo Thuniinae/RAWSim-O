@@ -67,6 +67,18 @@ namespace RAWSimO.Core.Items
         /// </summary>
         public double DueTime { get; set; }
         /// <summary>
+        /// The time this order is bore.
+        /// </summary>
+        public DateTime TimePlaced { get; set; }
+        /// <summary>
+        /// 离截止时间的时间
+        /// </summary>
+        public double Timestay { get; set; }
+        /// <summary>
+        /// 离截止时间的排序
+        /// </summary>
+        public double sequence { get; set; }
+        /// <summary>
         /// Enumerates all lines of the order.
         /// </summary>
         public IEnumerable<KeyValuePair<ItemDescription, int>> Positions { get { return _quantities; } }

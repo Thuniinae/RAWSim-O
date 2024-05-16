@@ -102,6 +102,10 @@ namespace RAWSimO.Core.Elements
         /// </summary>
         private HashSet<ExtractRequest> _extractRequestsRegistered = new HashSet<ExtractRequest>();
         /// <summary>
+        /// pod的顺序
+        /// </summary>
+        public int sequence { get; set; }
+        /// <summary>
         /// Initializes the content info of this pod. Call this only once before something is added to the pod.
         /// </summary>
         private void InitPodContentInfo()
@@ -164,6 +168,20 @@ namespace RAWSimO.Core.Elements
             extractRequest.Unassign(this);
             // Notify instance
             Instance.NotifyPodItemUnreserved(this, item, extractRequest);
+        }
+
+        /// <summary>
+        /// Reserves an item that is going to be picked at a station.
+        /// </summary>
+        /// <param name="item">The item that is going to be reserved for picking.</param>
+        internal void JustRegisterItem(ItemDescription item)
+        {
+            // Init, if not done yet
+            if (_itemDescriptionCountContained == null)
+                InitPodContentInfo();
+            if (_itemDescriptionCountAvailable[item] <= 0)
+                throw new InvalidOperationException("Cannot reserve an item for picking, if there is none left of the kind!");
+            _itemDescriptionCountAvailable[item]--;
         }
 
         /// <summary>

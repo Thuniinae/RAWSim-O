@@ -1148,6 +1148,10 @@ namespace RAWSimO.Core.Control
             {
                 return doExtractTaskForStation(bot, oStation, extendSearch, extendedSearchRadius, config as FullyDemandPodSelectionConfiguration);
             }
+            else if (config.GetType() == typeof(HADODPodSelectionConfiguration))
+            {
+                return doExtractTaskForStationHADOD(bot, oStation, extendSearch, config as HADODPodSelectionConfiguration);
+            }
             else if (config.GetType() == typeof(SimulatedAnnealingPodSelectionConfiguration))
             {
                 return doExtractTaskForStation(bot, oStation, extendSearch, extendedSearchRadius, config as SimulatedAnnealingPodSelectionConfiguration);
@@ -1523,6 +1527,123 @@ namespace RAWSimO.Core.Control
             // TO DO
             return false;
         }
+
+        /// <summary>
+        /// Allocates an available extract task to the bot for the predefined output-station. If no task is available the search might be extended to neighbour-stations or a rest task is done.
+        /// </summary>
+        /// <param name="bot">The bot to allocate a task to.</param>
+        /// <param name="oStation">The station to do work for.</param>
+        /// <param name="extendSearch">Indicates whether the search can be extended to neighbor stations.</param>
+        /// <param name="config">Pod selection config to use.</param>
+        /// /// <returns>true if bot has a new extract task or is just parking the pod, false if it is doing a rest task.</returns>
+        protected bool doExtractTaskForStationHADOD(Bot bot, OutputStation oStation, bool extendSearch, HADODPodSelectionConfiguration config)
+        {
+
+            // Try another task with the current pod if there is one
+            if (bot.Pod != null)
+            {
+                // 如果存在所携带的pod正好是刚分配的pod
+                if (Instance.ResourceManager._Ziops1[oStation].Select(v => v.Key.ID).Contains(bot.Pod.ID) && Instance.ResourceManager._Ziops1[oStation][bot.Pod].Count() > 0)
+                {
+                    // Get all fitting requests
+                    List<ExtractRequest> fittingRequests = Instance.ResourceManager._Ziops1[oStation][bot.Pod];
+                    Instance.ResourceManager._availablePodsPerStation[oStation].Remove(bot.Pod);
+                    Instance.ResourceManager._Ziops1[oStation].Remove(bot.Pod);
+                    //if (fittingRequests.Count == 0)
+                    //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                    // Log
+                    Instance.LogVerbose("PC (extract): Recycling combination (" + fittingRequests.Count + " requests)");
+                    // Simply execute the next task with the pod
+                    EnqueueExtract(
+                        bot, // The bot itself
+                        oStation, // The current station
+                        bot.Pod, // Keep the pod
+                        fittingRequests); // The requests to serve
+                    //if (Instance.ResourceManager._Ziops[oStation].Sum(v => v.Value.Count) != Instance.ResourceManager.GetExtractRequestsOfStation(oStation).Count())
+                    //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                    return true;
+                }
+                else
+                {
+                    // Look for work to do for nearby stations (if desired)
+                    if (extendSearch)
+                    {
+                        foreach (var station in bot.Tier.OutputStations.Where(s => s != oStation))
+                        {
+                            if (Instance.ResourceManager._Ziops1[station].ContainsKey(bot.Pod) && Instance.ResourceManager._Ziops1[station][bot.Pod].Count() > 0)
+                            {
+                                Instance.ResourceManager._availablePodsPerStation[station].Remove(bot.Pod);
+                                List<ExtractRequest> fittingRequests = Instance.ResourceManager._Ziops1[station][bot.Pod];
+                                Instance.ResourceManager._Ziops1[station].Remove(bot.Pod);
+                                //if (fittingRequests.Count == 0)
+                                //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                                //if (Instance.ResourceManager._Ziops[station].Sum(v => v.Value.Count) != Instance.ResourceManager.GetExtractRequestsOfStation(station).Count() - fittingRequests.Count)
+                                //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                                // Log
+                                Instance.LogVerbose("PC (extract): Recycling pod only (" + fittingRequests.Count + " requests)");
+                                // Simply execute the next task with the pod
+                                EnqueueExtract(
+                                    bot, // The bot itself
+                                    station, // The current station
+                                    bot.Pod, // Keep the pod
+                                    fittingRequests); // The requests to serve
+                                //if (Instance.ResourceManager._Ziops[station].Sum(v => v.Value.Count) != Instance.ResourceManager.GetExtractRequestsOfStation(station).Count())
+                                //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                                // Log score statistics
+                                if (_statOStationForPodScorerValues == null)
+                                    _statOStationForPodScorerValues = _bestOStationCandidateSelector.BestScores.ToArray();
+                                else
+                                    for (int i = 0; i < _bestOStationCandidateSelector.BestScores.Length; i++)
+                                        _statOStationForPodScorerValues[i] += _bestOStationCandidateSelector.BestScores[i];
+                                _statOStationForPodAssignments++;
+                                return true;
+                            }
+                        }
+                    }
+
+                    // Pod is not useful anymore - put it away   将pod送回存储区域
+                    EnqueueParkPod(bot, bot.Pod, Instance.Controller.PodStorageManager.GetStorageLocation(bot.Pod));
+                    return true;
+                }
+            }
+            else
+            {
+                //_bestPodOStationCandidateSelector.Recycle();
+                //// Determine best pod
+                Pod bestPod = null;
+                //Pod bestPod1 = null;
+                //bestPod1 = Instance.ResourceManager._Ziops[oStation].Select(s=>s.Key).Where(v => Instance.ResourceManager.UnusedPods.Contains(v)).OrderBy(v => v.sequence).FirstOrDefault();
+                bestPod = Instance.ResourceManager._Ziops1[oStation].Select(s => s.Key).Where(v => Instance.ResourceManager.UnusedPods.Contains(v)).OrderBy(v => Distances.CalculateShortestPathPodSafe
+                (v.Waypoint, bot.CurrentWaypoint, Instance)).ThenBy(v => Distances.CalculateShortestPathPodSafe(v.Waypoint, oStation.Waypoint, Instance)).FirstOrDefault();
+                // See whether there was any suitable pod
+                if (bestPod != null)
+                {
+                    Instance.ResourceManager._availablePodsPerStation[oStation].Remove(bestPod);
+                    // Get all fitting requests
+                    List<ExtractRequest> fittingRequests = Instance.ResourceManager._Ziops1[oStation][bestPod];
+                    //if (Instance.ResourceManager._Ziops[oStation].Sum(v => v.Value.Count) != Instance.ResourceManager.GetExtractRequestsOfStation(oStation).Count())
+                    //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                    Instance.ResourceManager._Ziops1[oStation].Remove(bestPod);
+                    if (fittingRequests.Count == 0)
+                        return false;
+                    // Log
+                    Instance.LogVerbose("PC (extract): New pod (" + fittingRequests.Count + " requests)");
+                    // Simply execute the next task with the pod
+                    EnqueueExtract(
+                        bot, // The bot itself
+                        oStation, // The current station
+                        bestPod, // The new pod
+                        fittingRequests); // The requests to serve
+                    //if (Instance.ResourceManager._Ziops[oStation].Sum(v => v.Value.Count) != Instance.ResourceManager.GetExtractRequestsOfStation(oStation).Count())
+                    //    throw new InvalidOperationException("Could not any request from the selected pod!");
+                    return true;
+                }
+            }
+
+            // Signal no task found
+            return false;
+        }
+        
         
         #endregion
 

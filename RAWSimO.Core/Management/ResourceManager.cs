@@ -37,6 +37,8 @@ namespace RAWSimO.Core.Management
             {
                 _availableExtractRequestsPerStation[oStation] = new HashSet<ExtractRequest>();
                 _availableExtractRequestsPerStationQueue[oStation] = new HashSet<ExtractRequest>();
+                _availablePodsPerStation[oStation] = new HashSet<Pod>();
+                _Ziops1[oStation] = new Dictionary<Pod, List<ExtractRequest>>();
             }
             foreach (var iStation in instance.InputStations)
                 _availableStoreRequestsPerStation[iStation] = new HashSet<InsertRequest>();
@@ -367,7 +369,15 @@ namespace RAWSimO.Core.Management
         /// The respective stations an extract request was queued for, if it was queued.
         /// </summary>
         private Dictionary<ExtractRequest, OutputStation> _stationQueuedPerExtractRequest = new Dictionary<ExtractRequest, OutputStation>();
-
+        /// <summary>
+        ///已分配给工作站的Pods
+        /// </summary>
+        public Dictionary<OutputStation, HashSet<Pod>> _availablePodsPerStation = new Dictionary<OutputStation, HashSet<Pod>>();
+        /// <summary>
+        ///已分配给工作站的Ziops1
+        /// </summary>
+        public Dictionary<OutputStation, Dictionary<Pod, List<ExtractRequest>>> _Ziops1 = new Dictionary<OutputStation, Dictionary<Pod, List<ExtractRequest>>>();
+        
         /// <summary>
         /// Creates requests for all placed orders.
         /// </summary>

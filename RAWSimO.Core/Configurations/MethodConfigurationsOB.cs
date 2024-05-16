@@ -576,5 +576,42 @@ namespace RAWSimO.Core.Configurations
             return "FullySupplied";
         }
     }
+    /// <summary>
+    /// The configuration for the corresponding method.
+    /// </summary>
+    public class HADODConfiguration : OrderBatchingConfiguration
+    {
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override OrderBatchingMethodType GetMethodType() { return OrderBatchingMethodType.HADOD; }
+        /// <summary>
+        /// Indicates how to break ties when assigning orders.
+        /// </summary>
+        public OrderSelectionTieBreaker TieBreaker = OrderSelectionTieBreaker.EarliestDueTime;
+        /// <summary>
+        /// Indicates whether a fast lane slot is used, i.e. one slot of each station is kept free for immediately fulfillable orders.
+        /// </summary>
+        public bool FastLane = true;
+        /// <summary>
+        /// Indicates that orders already late will be preferred over a well matching order.
+        /// </summary>
+        public bool LateBeforeMatch = false;
+        /// <summary>
+        /// Indicates how to break ties when assigning fast lane orders.
+        /// </summary>
+        public FastLaneTieBreaker FastLaneTieBreaker = FastLaneTieBreaker.EarliestDueTime;
+        /// <summary>
+        /// Returns a name identifying the method.
+        /// </summary>
+        /// <returns>The name of the method.</returns>
+        public override string GetMethodName()
+        {
+            if (!string.IsNullOrWhiteSpace(Name)) return Name;
+            string name = "obMP" + (FastLane ? "y" : "n");
+            return name;
+        }
+    }
     #endregion
 }
