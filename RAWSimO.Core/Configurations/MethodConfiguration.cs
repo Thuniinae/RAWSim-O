@@ -607,6 +607,7 @@ namespace RAWSimO.Core.Configurations
     /// </summary>
     [XmlInclude(typeof(DefaultPodSelectionConfiguration))]
     [XmlInclude(typeof(FullyDemandPodSelectionConfiguration))]
+    [XmlInclude(typeof(SimulatedAnnealingPodSelectionConfiguration))]
     abstract public class PodSelectionConfiguration : ControllerConfigurationBase{}
     /// <summary>
     /// Base class for the station activation configuration.

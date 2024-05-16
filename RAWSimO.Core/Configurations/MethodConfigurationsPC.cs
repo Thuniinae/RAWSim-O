@@ -717,6 +717,61 @@ namespace RAWSimO.Core.Configurations
             return "FullyDemandPodSelection";
         }
     }
+    /// <summary>
+    /// Exposes parameters for the Simulated-Annealing(SA) Pod selection of pods. Output Extend search not implement.
+    /// </summary>
+    public class SimulatedAnnealingPodSelectionConfiguration : PodSelectionConfiguration
+    {
+        /// <summary>
+        /// Indicates whether more suitable extract requests are included in an ongoing extract task on-the-fly.
+        /// </summary>
+        public bool OnTheFlyExtract = false;
+        /// <summary>
+        /// Indicates whether more suitable insert requests are included in an ongoing store task on-the-fly.
+        /// </summary>
+        public bool OnTheFlyStore = false;
+        /// <summary>
+        /// Indicates the mode for filtering suitable pods for picking stations (default: AssignedOnly).
+        /// </summary>
+        public PodSelectionExtractRequestFilteringMode FilterForConsideration = PodSelectionExtractRequestFilteringMode.AssignedOnly;
+        /// <summary>
+        /// Indicates the mode for filtering the requests when deciding the actual reservations for a pod.
+        /// </summary>
+        public PodSelectionExtractRequestFilteringMode FilterForReservation = PodSelectionExtractRequestFilteringMode.AssignedAndCompleteQueued;
+
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (main rule).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorer = new PCScorerIStationForBotWithPodWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (first tie breaker).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorerTieBreaker1 = new PCScorerIStationForBotWithPodNearest();
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (second tie breaker).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorerTieBreaker2 = new PCScorerIStationForBotWithPodRandom();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (main rule).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorer = new PCScorerPodForIStationBotWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (first tie breaker).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorerTieBreaker1 = new PCScorerPodForIStationBotNearest();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (second tie breaker).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorerTieBreaker2 = new PCScorerPodForIStationBotRandom();
+        /// <summary>
+        /// Returns a name identifying the method, setting is ignored in name.
+        /// </summary>
+        /// <returns>The name of the method.</returns>
+        public override string GetMethodName()
+        {
+            return "SimulatedAnnealingPodSelection";
+        }
+    }
     #endregion
 
     #region Helpers

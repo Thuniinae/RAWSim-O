@@ -983,6 +983,25 @@ namespace RAWSimO.Core.Control
                         GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker2));
                 }
             }
+            else if (config.GetType() == typeof(SimulatedAnnealingPodSelectionConfiguration)) 
+            {
+                var _config = config as SimulatedAnnealingPodSelectionConfiguration;
+                // --> Prepare best candidate selectors
+                if (_bestIStationCandidateSelector == null)
+                {
+                    _bestIStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorer),
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorerTieBreaker1),
+                        GenerateScorerIStationForBotWithPod(_config.InputExtendedSearchScorerTieBreaker2));
+                }
+                if (_bestPodIStationCandidateSelector == null)
+                {
+                    _bestPodIStationCandidateSelector = new BestCandidateSelector(false,
+                        GenerateScorerPodForIStationBot(_config.InputPodScorer),
+                        GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker1),
+                        GenerateScorerPodForIStationBot(_config.InputPodScorerTieBreaker2));
+                }
+            }
             else throw new ArgumentException("Unknown pod selection type: " + config.GetType().ToString());
 
             // Try another task with the current pod if there is one
@@ -1128,6 +1147,10 @@ namespace RAWSimO.Core.Control
             else if (config.GetType() == typeof(FullyDemandPodSelectionConfiguration))
             {
                 return doExtractTaskForStation(bot, oStation, extendSearch, extendedSearchRadius, config as FullyDemandPodSelectionConfiguration);
+            }
+            else if (config.GetType() == typeof(SimulatedAnnealingPodSelectionConfiguration))
+            {
+                return doExtractTaskForStation(bot, oStation, extendSearch, extendedSearchRadius, config as SimulatedAnnealingPodSelectionConfiguration);
             }
             else throw new ArgumentException("Unknown pod selection type: " + config.GetType().ToString());
             
@@ -1486,6 +1509,21 @@ namespace RAWSimO.Core.Control
             }
         }
         
+        /// <summary>
+        /// Fully-Demand allocates an available extract task to the bot for the predefined output-station.
+        /// </summary>
+        /// <param name="bot">The bot to allocate a task to.</param>
+        /// <param name="oStation">The station to do work for.</param>
+        /// <param name="extendSearch">Indicates whether the search can be extended to neighbor stations.</param>
+        /// <param name="extendedSearchRadius">The radius by which the search can be expanded.</param>
+        /// <param name="config">Pod selection config to use.</param>
+        /// /// <returns>true if bot has a new extract task or is just parking the pod, false if it is doing a rest task.</returns>
+        private bool doExtractTaskForStation(Bot bot, OutputStation oStation, bool extendSearch, double extendedSearchRadius, SimulatedAnnealingPodSelectionConfiguration config)
+        {
+            // TO DO
+            return false;
+        }
+        
         #endregion
 
         #region On-the-fly work helpers
@@ -1740,6 +1778,10 @@ namespace RAWSimO.Core.Control
                     _onTheFlyExtractSituationInvestigated = true;
                     _onTheFlyStoreSituationInvestigated = true;
                 }
+            }
+            else if (config.GetType() == typeof(SimulatedAnnealingPodSelectionConfiguration))
+            {
+                // do nothing
             }
             else new ArgumentException("Unknown pod selection type: " + config.GetType().ToString());
         }
