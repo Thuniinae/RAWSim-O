@@ -17,6 +17,7 @@ using RAWSimO.MultiAgentPathFinding.Algorithms.AStar;
 using RAWSimO.Core.Bots;
 using RAWSimO.MultiAgentPathFinding.Elements;
 using RAWSimO.Core.Control.Defaults.OrderBatching;
+using RAWSimO.Core.Control.Defaults.PathPlanning;
 
 namespace RAWSimO.Core.Control
 {
@@ -1532,7 +1533,7 @@ namespace RAWSimO.Core.Control
         }
         
         /// <summary>
-        /// Fully-Demand allocates an available extract task to the bot for the predefined output-station.
+        /// Simulated Annealing allocates an available extract task to the bot for the predefined output-station.
         /// </summary>
         /// <param name="bot">The bot to allocate a task to.</param>
         /// <param name="oStation">The station to do work for.</param>
@@ -1542,8 +1543,211 @@ namespace RAWSimO.Core.Control
         /// /// <returns>true if bot has a new extract task or is just parking the pod, false if it is doing a rest task.</returns>
         private bool doExtractTaskForStation(Bot bot, OutputStation oStation, bool extendSearch, double extendedSearchRadius, SimulatedAnnealingPodSelectionConfiguration config)
         {
-            // TO DO
+            // check order manager
+            if (Instance.Controller.OrderManager.GetType() != typeof(FullySuppliedOrderManager))
+                throw new ArgumentException("Unknown order manager type for Simulated Annealing Pod Selection: " + Instance.Controller.OrderManager.GetType().ToString());
+            // Check path manager
+            if (Instance.Controller.PathManager.GetType() != typeof(WHCAvStarPathManager))
+                throw new ArgumentException("Unknown path manager for Simulated Annealing Pod selection!");
+
+            var orderManager = Instance.Controller.OrderManager as FullySuppliedOrderManager;
+            var WHCAv = Instance.Controller.PathManager as WHCAvStarPathManager;
+
+            // Init
+            if (pendingPods == null)
+            {
+                pendingPods = new Dictionary<OutputStation, List<Pod>>(Instance.OutputStations.Select(s => new KeyValuePair<OutputStation, List<Pod>>(s, null)));
+                foreach(var station in Instance.OutputStations)
+                    pendingPods[station] = new List<Pod>();
+            }
+
+            // Try another task with the current pod if there is one
+            if (bot.Pod != null)
+            {
+                // TODO: consider pods that leave the station into consideration of pod selection without parking first
+                // Pod is not useful anymore - put it away
+                EnqueueParkPod(bot, bot.Pod, Instance.Controller.PodStorageManager.GetStorageLocation(bot.Pod));
+                Instance.LogVerbose("Park pod.");
+                return true;
+            }
+            else
+            {
+                foreach(var undecidedOrders in new List<HashSet<Order>>{orderManager.pendingLateOrders, orderManager.pendingNotLateOrders} )
+                {
+                    // search not late orders if no late order can be fulfilled
+                    // end search if no not late order can be fulfilled
+                    if (undecidedOrders.Count == 0)
+                    {
+                        // don't search not late order even if station remain capacity
+                        if (orderManager.lateOrdersEnough)
+                            break; 
+                        else
+                            continue;
+                    }
+                    // try allocate order with current inbound pods, to eliminate situation of assigning pod without extract task
+                    orderManager.FullySupplied(oStation, undecidedOrders);
+
+                    // check station capacity
+                    if (oStation.CapacityInUse + oStation.CapacityReserved >= oStation.Capacity)
+                        break;
+
+                    double bestScore = 1.0; // score for pod selection
+                    // pick new pod or pod set if there are none
+                    if (pendingPods[oStation].Count == 0)
+                    {
+                        // Temporary: Greedy solution of maximizing station's item throughput rate
+                        // Determine best pod from all unused pods by maximizing station's item throughput
+                        Dictionary<Pod, Tuple<List<Order>, int>> scores = new();
+                        foreach (var pod in Instance.ResourceManager.UnusedPods)
+                        {
+                            int Score = 0;
+                            var orders = new List<Order>();
+                            // Check all order backlog, where sufficient inventory is still available in the pod set with the new pod
+                            foreach (var order in undecidedOrders.Where(o => o.Positions.All(p =>
+                                oStation.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
+                            {
+                                Score += order.Positions.Sum(p => p.Value); // number of all items
+                                orders.Add(order);
+                            }
+                            scores.Add(pod, new Tuple<List<Order>, int> (orders, Score));
+                        }
+                        // only consider top searchPodNum pods of the score
+                        var bestPod = scores.OrderByDescending(d => d.Value.Item2).Take(config.searchPodNum).Select(d => d.Key).
+                                ArgMax(pod => {
+                                    // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
+                                    double endTime = WHCAv.findPath(bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false); 
+                                    endTime = WHCAv.findPath(bot, endTime, pod.Waypoint, pod.Waypoint, false); 
+                                    return scores[pod].Item2 / endTime + scores[pod].Item2*Instance.LayoutConfig.ItemPickTime; // estimated station item throughput rate
+                                });
+                        var possibleOrders = scores[bestPod].Item1;
+                        // make sure at least one pod is assigned, 
+                        if (possibleOrders.Count > 0)
+                        {
+                            pendingPods[oStation].Add(bestPod);
+                            Instance.ResourceManager.ClaimPod(bestPod, null, BotTaskType.None);
+                            // Init if haven't
+                            if (!pendingExtracts.ContainsKey(bestPod)) pendingExtracts.Add(bestPod, new List<ExtractRequest>());
+                            // Fully-Supplied should be done right after any success pod selection
+                            var request = orderManager.ExtraDecideAboutPendingOrders(oStation, bestPod, undecidedOrders, possibleOrders);
+                            // deal with best pod request
+                            pendingExtracts[bestPod] = request;
+                        }
+                        else // by adding pods to an fully fulfillable order with longest stay time in backlog
+                        { 
+                            bool success = false;
+                            // search from order with longest stay time in backlog i.e. first put in backlog
+                            foreach(var order in undecidedOrders)
+                            {
+                                // in original Fully-supplied does not consider inbound pods
+                                var requiredAmount = new Dictionary<ItemDescription, int>(
+                                    order.Positions.Where(p => p.Value - oStation.CountAvailable(p.Key) > 0).Select(p =>
+                                    new KeyValuePair<ItemDescription, int>(p.Key, p.Value - oStation.CountAvailable(p.Key))));
+                                // get possible pods contained with items in the order
+                                var possiblePods = new Dictionary<ItemDescription, List<Pod>>(requiredAmount.Select(
+                                    r => new KeyValuePair<ItemDescription, List<Pod>>(r.Key, new List<Pod>(
+                                        Instance.ResourceManager.UnusedPods.Where(pod => pod.CountAvailable(r.Key) > 0)
+                                    ))
+                                ));
+                                // check if the order is fulfillable
+                                if (requiredAmount.Any(r => r.Value > possiblePods[r.Key].Sum(pod => pod.CountAvailable(r.Key))))
+                                    continue;
+
+                                // greedy search from pod that can provided most item
+                                foreach(var pod in possiblePods.SelectMany(d => d.Value).Distinct().OrderByDescending(pod => 
+                                    requiredAmount.Sum(r => Math.Min(r.Value, pod.CountAvailable(r.Key)))))
+                                {
+                                    if(requiredAmount.All(r => r.Value <= 0))
+                                        break;
+                                    // the pod can't supply any remaining required amount
+                                    else if (requiredAmount.Sum(d => Math.Min(d.Value, pod.CountAvailable(d.Key))) == 0)
+                                        continue;
+                                    pendingPods[oStation].Add(pod);
+                                    // claim all pending pod to prevent be claimed by replenishment, reposition...
+                                    // pod will be released right after leaving pending pods and become selected pod
+                                    Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
+                                    foreach(var item in requiredAmount.Keys)
+                                    {
+                                        int takePod = Math.Min(requiredAmount[item], pod.CountAvailable(item));
+                                        requiredAmount[item] -= takePod;
+                                    }
+                                    
+                                }
+                                // check negative number
+                                if (requiredAmount.All(r => r.Value < 0))
+                                    throw new Exception("remaining required amount shouldn't smaller than 0.");
+                                else
+                                {
+                                    // Fully-Supplied should be done right after any success pod selection
+                                    var request = orderManager.ExtraDecideAboutPendingOrder(oStation, pendingPods[oStation], undecidedOrders, order);
+                                    
+                                    // deal with pending request
+                                    foreach(var pod in pendingPods[oStation])
+                                    {
+                                        // Check and init
+                                        if(!pendingExtracts.ContainsKey(pod))
+                                            pendingExtracts.Add(pod, new List<ExtractRequest>());
+                                        else
+                                            throw new Exception("The pod has remaining pending extract request!");
+                                        pendingExtracts[pod] = request[pod];
+                                        // check empty extract
+                                        if(pendingExtracts[pod].Count == 0)
+                                        {
+                                            System.Console.WriteLine($"order: {string.Join(", ", order.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
+                                            foreach(var p in pendingPods[oStation])
+                                            {
+                                                System.Console.WriteLine($"pod {p.ID}: {string.Join(",", p.ItemDescriptionsContained.Select(i => $"{i.ID}({p.CountAvailable(i)})"))}");
+                                            }
+                                            foreach(var r in request)
+                                            {
+                                                System.Console.WriteLine($"request of inbound pod {r.Key.ID}: {string.Join(", ", r.Value.Select(r => r.Item.ID))}");
+                                            }
+                                            throw new Exception($"New pod {pod.ID} in pod set without assigning any extract request");
+                                        }
+                                        request.Remove(pod);
+                                    }
+                                    if(request.Keys.Count > 0)
+                                        throw new Exception("Remain requests not deal with!");
+                                    success = true;
+                                }
+                                break; 
+                            }
+                            if (!success) // failed to find a fulfillable order, try not late order
+                                continue;
+                        }
+                    }
+                    // statistic
+                    if (pendingPods[oStation].Count == 1)
+                        _statSinglePodNum++;
+                    else
+                        _statPodSetNum+= pendingPods[oStation].Count;
+                    Instance.LogVerbose($"single pod/ pod set assigned: {_statSinglePodNum}/ {_statPodSetNum}");
+                    Pod selectedPod = pendingPods[oStation].First();
+                    bestScore /= pendingPods[oStation].Count; // pod set has lower score
+                    pendingPods[oStation].Remove(selectedPod);
+                    // release pod for later extract request
+                    Instance.ResourceManager.ReleasePod(selectedPod);
+
+                    // Log
+                    Instance.LogVerbose("PC (extract): New pod (" + pendingExtracts[selectedPod].Count + " requests)");
+                    // Simply execute the next task with the pod
+                    EnqueueExtract(
+                        bot, // The bot itself
+                        oStation, // The current station
+                        selectedPod, // The new pod
+                        pendingExtracts[selectedPod]); // The requests to serve
+                    // remove pending extracts
+                    pendingExtracts.Remove(selectedPod);
+                    orderManager.SignalPodAssigned();
+                    // Log score statistics
+                    _statPodForOStationAssignments++;
+                    Instance.StatCustomControllerInfo.CustomLogPC1 = bestScore / _statPodForOStationAssignments;
+                    Instance.StatCustomControllerInfo.CustomLogPC2 = 0;
+                    Instance.StatCustomControllerInfo.CustomLogPC3 = 0;
+                    return true;
+                }
+                // can't assign any pod
             return false;
+            }
         }
 
         /// <summary>

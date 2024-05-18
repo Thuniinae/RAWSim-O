@@ -807,6 +807,22 @@ namespace RAWSimO.Core.Configurations
     public class SimulatedAnnealingPodSelectionConfiguration : PodSelectionConfiguration
     {
         /// <summary>
+        /// Initial temperature of Simulated Annealing Algorithm
+        /// </summary>
+        public int initTemp = 100;
+        /// <summary>
+        /// Cooling rate of the temperature: t' = t * coolingRate
+        /// </summary>
+        public double coolingRate = 0.9;
+        /// <summary>
+        /// Minimal temperature of the system, stop algorithm when temperature is lower than this.
+        /// </summary>
+        public double minTemp = 0.5;
+        /// <summary>
+        /// Number of pods that consider it's arrival time to the station
+        /// </summary>
+        public int searchPodNum = 50;
+        /// <summary>
         /// Indicates whether more suitable extract requests are included in an ongoing extract task on-the-fly.
         /// </summary>
         public bool OnTheFlyExtract = false;
