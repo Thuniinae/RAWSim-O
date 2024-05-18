@@ -152,7 +152,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     // Assign the order
                     AllocateOrder(chosenOrder, station);
-                    Instance.LogVerbose($"Fully-supplied order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
                     // remove from order list
                     undecidedOrders.Remove(chosenOrder);
                     // calculate extract request
@@ -185,10 +184,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             foreach(var pod in station.InboundPods)
             {
                 Instance.Controller.BotManager.AddExtract(pod, requests[pod]);
-                foreach(var r in requests[pod])
-                {
-                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
-                }
                 requests.Remove(pod);
             }
             // check if all station requests are registered
@@ -242,7 +237,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     // Assign the order
                     AllocateOrder(chosenOrder, station);
-                    Instance.LogVerbose($"single pod {newPod.ID}'s order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})\n"))}");
                     // remove from order list
                     undecidedOrders.Remove(chosenOrder);
                     // calculate extract request
@@ -286,11 +280,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             foreach(var pod in station.InboundPods)
             {
                 Instance.Controller.BotManager.AddExtract(pod, stationRequests[pod]);
-                foreach(var r in stationRequests[pod])
-                {
-                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
-                }
-                //stationRequests.Remove(pod);
             }
             if (requests.Count == 0){
                 foreach(var order in possibleOrders)
@@ -332,7 +321,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             {
                 // Assign the order
                 AllocateOrder(necessaryOrder, station);
-                Instance.LogVerbose($"pod set's order: {string.Join(", ", necessaryOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
                 // remove from order list
                 undecidedOrders.Remove(necessaryOrder);
                 // calculate extract request
@@ -371,10 +359,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             foreach(var pod in station.InboundPods)
             {
                 Instance.Controller.BotManager.AddExtract(pod, stationRequests[pod]);
-                foreach(var r in stationRequests[pod])
-                {
-                    Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
-                }
                 stationRequests.Remove(pod);
             }
 

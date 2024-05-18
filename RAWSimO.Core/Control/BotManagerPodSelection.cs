@@ -1,4 +1,4 @@
-﻿using RAWSimO.Core.Configurations;
+using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
@@ -1527,7 +1527,6 @@ namespace RAWSimO.Core.Control
                     return true;
                 }
                 // can't assign any pod
-                Instance.LogVerbose("failed finding extract task");
                 return false;
             }
         }
