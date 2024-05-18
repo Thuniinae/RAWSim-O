@@ -1605,12 +1605,9 @@ namespace RAWSimO.Core.Control
             // check order manager
             if (Instance.Controller.OrderManager.GetType() != typeof(FullySuppliedOrderManager))
                 throw new ArgumentException("Unknown order manager type for Simulated Annealing Pod Selection: " + Instance.Controller.OrderManager.GetType().ToString());
-            // Check path manager
-            if (Instance.Controller.PathManager.GetType() != typeof(WHCAvStarPathManager))
-                throw new ArgumentException("Unknown path manager for Simulated Annealing Pod selection!");
 
             var orderManager = Instance.Controller.OrderManager as FullySuppliedOrderManager;
-            var WHCAv = Instance.Controller.PathManager as WHCAvStarPathManager;
+            var pathManager = Instance.Controller.PathManager;
 
             // Init
             if (pendingPods == null)
@@ -1674,8 +1671,8 @@ namespace RAWSimO.Core.Control
                         var bestPod = scores.OrderByDescending(d => d.Value.Item2).Take(config.searchPodNum).Select(d => d.Key).
                                 ArgMax(pod => {
                                     // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
-                                    double endTime = WHCAv.findPath(bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false); 
-                                    endTime = WHCAv.findPath(bot, endTime, pod.Waypoint, pod.Waypoint, false); 
+                                    double endTime = pathManager.findPath(bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false); 
+                                    endTime = pathManager.findPath(bot, endTime, pod.Waypoint, pod.Waypoint, false); 
                                     return scores[pod].Item2 / endTime + scores[pod].Item2*Instance.LayoutConfig.ItemPickTime; // estimated station item throughput rate
                                 });
                         var possibleOrders = scores[bestPod].Item1;
