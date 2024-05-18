@@ -1,4 +1,4 @@
-using RAWSimO.Core.Configurations;
+﻿using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
@@ -1532,6 +1532,65 @@ namespace RAWSimO.Core.Control
             }
         }
         
+        private void SimulatedAnnealingPodSelection(SimulatedAnnealingPodSelectionConfiguration config)
+        {
+            // can consider pod item throughput rate first as simple solution
+
+            // initialize the temperature
+            int temp = config.initTemp;
+
+            // Assumptions:
+            // 1. pod selection with single pod is most case (>90%), thus pod-set assignment is deal with by HADOD
+
+            // Prerequisite:
+            // 1. Fully-supplied station with orders using inbound pods
+            // 2. triggered situation: 
+                // 1. station with capacity, what if there is only one?-> find best priority of the pod
+                // 2. need to have unused bot for station or need to know ending time of the bot
+            // 3. need to know the task allocation of bots (or just assume rest possible is at middle, which often happens when there are lots of bots)
+            // 4. station need to have at least ond pod that can fully-fulfilled an order
+            // 5. penalty time of possible collision
+
+            // Inputs: 
+            // 1. location of unused pods
+            // 2. order backlog
+            // 3. Initial temperature: make sure first few iteration can surely be worse
+            // 4. smallest bot available time of each station (to estimate new pod arrival time)
+
+            // For each station with remained capacity, find
+            // 1. 50% possible pods by nearest distance
+            // 2. 50% possible pods by items in Fully-fulfilled orders, with consideration of inbound pods
+
+            // Initialization:
+            // 1. Fill each station with one(?) pod and order, what if no order can be assigned to a station?
+            // 2. Fill station not being able to assign an order with longest stay time orders
+
+            // Iterations:
+            // 1. Generate new solution (orders allocated, pod selected, pod priority)
+                // 1. Decide explore(2.1) or exploit(3.1) (?%)
+                // 2.1 random pick a station
+                // 2.2 random(distribution?, can let pod with higher item throughput rate has higher probability) pick a pod in search space of the station
+                // 2.3 if the selected pod is already assigned to other station, then back to 2.2
+                // 2.4 skip 3
+                    //(new pod has lowest priority, for the ease of calculating path time?)
+                // 3.1 go to 2.1 if no pod bypass (don't have shortest path) (is this necessary?)
+                // 3.2 swap priority of a pod which bypass at least once with the pod it by pass 
+                // (doesn't this only improve efficiency of path planning, which already been researched)
+                // 4. replan all new(?, should be better assuming old pod movement has higher priority) pod
+                // (as the number of output station, should be fast)
+            // 2. Calculate new solution with sum of item throughput rate of picking all items of all stations
+            // 3. if exp((new - current item throughput) / T) > random(0, 1) , current = new solution
+            // 4. Decrease temperature
+            // 5. if temperature large enough go to 1.
+            // 6. end
+
+            // Outputs:
+            // 1. pod selection with extract request (will be executed by allocated bot of the stations)
+            // 2. orders allocation
+            // 3. pod priority
+            // 4. path planning result (will be difficult)
+        }
+        
         /// <summary>
         /// Simulated Annealing allocates an available extract task to the bot for the predefined output-station.
         /// </summary>
@@ -1746,7 +1805,7 @@ namespace RAWSimO.Core.Control
                     return true;
                 }
                 // can't assign any pod
-            return false;
+                return false;
             }
         }
 
@@ -2259,6 +2318,8 @@ namespace RAWSimO.Core.Control
         /// Contains the number of assignments done.
         /// </summary>
         private double _statIStationForPodAssignments = 0;
+        private double _statSinglePodNum = 0;
+        private double _statPodSetNum = 0;
         /// <summary>
         /// The callback indicates a reset of the statistics.
         /// </summary>
