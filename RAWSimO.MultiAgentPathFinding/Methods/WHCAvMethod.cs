@@ -204,8 +204,14 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
 
             return conflictFree;
         }
-
-        public bool findPath(out double timeCost, double currentTime, Agent agent)
+        /// <summary>
+        /// Find path of an agent and the ending time of the path, using current reservation table.
+        /// </summary>
+        /// <param name="endTime"></param>
+        /// <param name="currentTime"></param>
+        /// <param name="agent"></param>
+        /// <returns></returns>
+        public bool findPath(out double endTime, double currentTime, Agent agent)
         {
             if (agent != null) 
             {
@@ -225,12 +231,12 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 {
                     List<ReservationTable.Interval> reservations;
                     aStar.GetPathAndReservations(ref agent.Path, out reservations);
-                    timeCost = reservations.Last().End;
+                    endTime = reservations.Last().End;
                     return true;
                 }
             }
             // failed to find path
-            timeCost = double.MaxValue;
+            endTime = double.MaxValue;
             return false;
         }
 
