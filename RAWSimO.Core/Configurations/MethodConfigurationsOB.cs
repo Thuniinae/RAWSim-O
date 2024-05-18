@@ -546,13 +546,9 @@ namespace RAWSimO.Core.Configurations
     public class FullySuppliedOrderBatchingConfiguration : OrderBatchingConfiguration
     {
         /// <summary>
-        /// Not real tiebreaker, indicates how to select from orders that are fully-supplied (default: Random).
-        /// </summary>
-        public OrderSelectionTieBreaker TieBreaker = OrderSelectionTieBreaker.Random;
-        /// <summary>
         /// Indicates whether a fast lane slot is used, i.e. one slot of each station is kept free for immediately fulfillable orders.
         /// </summary>
-        public bool FastLane = true;
+        public bool FastLane = false;
         /// <summary>
         /// Indicates how to break ties when assigning fast lane orders.
         /// </summary>

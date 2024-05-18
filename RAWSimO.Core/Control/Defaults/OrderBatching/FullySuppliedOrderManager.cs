@@ -48,9 +48,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         private bool IsAssignableKeepFastLaneSlot(OutputStation station)
         { return station.Active && station.CapacityReserved + station.CapacityInUse < station.Capacity - 1; }
 
-        private BestCandidateSelector _bestCandidateSelectNormal;
         private BestCandidateSelector _bestCandidateSelectFastLane;
-        private OutputStation _currentStation = null;
         private Order _currentOrder = null;
         private VolatileIDDictionary<OutputStation, Pod> _nearestInboundPod;
 
@@ -59,26 +57,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// </summary>
         private void Initialize()
         {
-            // Set some values for statistics
-            _statFullySuppliedScoreIndex = 0;
-            // --> Setup normal scorers
-            List<Func<double>> normalScorers = new List<Func<double>>();
-            // Select best by match with inbound pods
-            /*normalScorers.Add(() =>
-            {
-                return _currentOrder.Positions.Sum(line => Math.Min(_currentStation.InboundPods.Sum(pod => pod.CountAvailable(line.Key)), line.Value));
-            });*/
-            // If we run into ties use the oldest order
-            normalScorers.Add(() =>
-            {
-                switch (_config.TieBreaker)
-                {
-                    case Shared.OrderSelectionTieBreaker.Random: return Instance.Randomizer.NextDouble();
-                    case Shared.OrderSelectionTieBreaker.EarliestDueTime: return -_currentOrder.DueTime;
-                    case Shared.OrderSelectionTieBreaker.FCFS: return -_currentOrder.TimeStamp;
-                    default: throw new ArgumentException("Unknown tie breaker: " + _config.FastLaneTieBreaker);
-                }
-            });
             // --> Setup fast lane scorers
             List<Func<double>> fastLaneScorers = new List<Func<double>>();
             // If we run into ties use the oldest order
@@ -93,12 +71,9 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 }
             });
             // Init selectors
-            _bestCandidateSelectNormal = new BestCandidateSelector(true, normalScorers.ToArray());
             _bestCandidateSelectFastLane = new BestCandidateSelector(true, fastLaneScorers.ToArray());
             if (_config.FastLane)
                 _nearestInboundPod = new VolatileIDDictionary<OutputStation, Pod>(Instance.OutputStations.Select(s => new VolatileKeyValuePair<OutputStation, Pod>(s, null)).ToList());
-            
-            
         }
         /// <summary>
         /// Prepares some meta information.
@@ -146,7 +121,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         public void FullySupplied(OutputStation station, HashSet<Order> undecidedOrders)
         {
             // If not initialized, do it now
-            if (_bestCandidateSelectNormal == null)
+            if (_config.FastLane == true && _bestCandidateSelectFastLane == null)
                 Initialize();
 
             Dictionary<Pod, List<ExtractRequest>> requests = 
@@ -160,11 +135,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             // Do until can't find any order or station full
             while(station.CapacityInUse + station.CapacityReserved < station.Capacity)
             {
-                _bestCandidateSelectNormal.Recycle();
-                // Set station
-                _currentStation = station;
                 // Prepare helpers
-                OutputStation chosenStation = null;
                 Order chosenOrder = null;
                 // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
                 foreach (var order in undecidedOrders)
@@ -173,19 +144,14 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                         stationRemain.Values.Sum(d => d.ContainsKey(p.Key)? d[p.Key]: 0) < p.Value))
                         continue;
                     // Set order
-                    _currentOrder = order;
-                    // --> Assess combination
-                    if (_bestCandidateSelectNormal.Reassess())
-                    {
-                        chosenStation = _currentStation;
-                        chosenOrder = _currentOrder;
-                    }
+                    chosenOrder = order;
+                    break;
                 }
                 // Assign best order if available
                 if (chosenOrder != null)
                 {
                     // Assign the order
-                    AllocateOrder(chosenOrder, chosenStation);
+                    AllocateOrder(chosenOrder, station);
                     Instance.LogVerbose($"Fully-supplied order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
                     // remove from order list
                     undecidedOrders.Remove(chosenOrder);
@@ -210,13 +176,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     if (requireRequests.Values.Any(v => v.Count > 0))
                         throw new Exception("Order selected can't be fulfilled");
                     // Log score statistics
-                    if (_statScorerValues == null)
-                        _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
-                    else
-                        for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
-                            _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
-                    _statAssignments++;
-                    Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
+                    Instance.StatCustomControllerInfo.CustomLogOB2 = -chosenOrder.TimeStamp;
                 }
                 else
                     break; // no more assignment for this station.
@@ -249,7 +209,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         public List<ExtractRequest> ExtraDecideAboutPendingOrders(OutputStation station, Pod newPod, HashSet<Order> undecidedOrders, List<Order> possibleOrders)
         {
             // If not initialized, do it now
-            if (_bestCandidateSelectNormal == null)
+            if (_config.FastLane == true && _bestCandidateSelectFastLane == null)
                 Initialize();
 
             List<ExtractRequest> requests = new();
@@ -265,33 +225,23 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
             // Do until can't find any order or station full
             while(station.CapacityInUse + station.CapacityReserved < station.Capacity)
             {
-                _bestCandidateSelectNormal.Recycle();
-                // Set station
-                _currentStation = station;
                 // Prepare helpers
-                OutputStation chosenStation = null;
                 Order chosenOrder = null;
                 // Search for best order for the station in all orders that can be fulfilled by the stations inbound pods
-                foreach (var order in undecidedOrders)
+                foreach (var order in undecidedOrders) // undecided orders is already sort in timestamp
                 {
                     if (order.Positions.Any(p => 
                     stationRemain.Values.Sum(d => d.ContainsKey(p.Key)? d[p.Key]: 0)
                     + (podRemain.ContainsKey(p.Key)? podRemain[p.Key] : 0) < p.Value))
                         continue;
-                    // Set order
-                    _currentOrder = order;
-                    // --> Assess combination
-                    if (_bestCandidateSelectNormal.Reassess())
-                    {
-                        chosenStation = _currentStation;
-                        chosenOrder = _currentOrder;
-                    }
+                    chosenOrder = order;
+                    break;
                 }
                 // Assign best order if available
                 if (chosenOrder != null)
                 {
                     // Assign the order
-                    AllocateOrder(chosenOrder, chosenStation);
+                    AllocateOrder(chosenOrder, station);
                     Instance.LogVerbose($"single pod {newPod.ID}'s order: {string.Join(", ", chosenOrder.Positions.Select(o=> $"{o.Key.ID}({o.Value})\n"))}");
                     // remove from order list
                     undecidedOrders.Remove(chosenOrder);
@@ -327,13 +277,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     if (podRemain.Values.Any(v => v < 0) || stationRemain.Values.Any(v => v.Values.Any(v1 => v1 < 0)))
                         throw new Exception("Remain negative number of item in pod or station.");
                     // Log score statistics
-                    if (_statScorerValues == null)
-                        _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
-                    else
-                        for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
-                            _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
-                    _statAssignments++;
-                    Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
+                    Instance.StatCustomControllerInfo.CustomLogOB2 = -chosenOrder.TimeStamp;;
                 }
                 else
                     break; // no more assignment for this station.
@@ -373,14 +317,10 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         public Dictionary<Pod, List<ExtractRequest>> ExtraDecideAboutPendingOrder(OutputStation station, List<Pod> newPods, HashSet<Order> undecidedOrders, Order necessaryOrder)
         {
             // If not initialized, do it now
-            if (_bestCandidateSelectNormal == null)
+            if (_config.FastLane == true && _bestCandidateSelectFastLane == null)
                 Initialize();
             // Get some meta info
             PrepareAssessment();
-            // only for score statistics
-            _currentOrder = necessaryOrder;
-            _currentStation = station;
-            _bestCandidateSelectNormal.Reassess();
 
             // Init
             Dictionary<Pod, List<ExtractRequest>> requests = 
@@ -422,13 +362,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                     throw new Exception("necessary order can't be fulfilled by new pod set and available item in inbound pod to the station");
                 
                 // Log score statistics
-                if (_statScorerValues == null)
-                    _statScorerValues = _bestCandidateSelectNormal.BestScores.ToArray();
-                else
-                    for (int i = 0; i < _bestCandidateSelectNormal.BestScores.Length; i++)
-                        _statScorerValues[i] += _bestCandidateSelectNormal.BestScores[i];
-                _statAssignments++;
-                Instance.StatCustomControllerInfo.CustomLogOB2 = _statScorerValues[_statFullySuppliedScoreIndex] / _statAssignments;
+                Instance.StatCustomControllerInfo.CustomLogOB2 = -necessaryOrder.TimeStamp / newPods.Count;
             }
             else
                 throw new Exception("necessary order is null!");
@@ -441,7 +375,7 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
                 {
                     Instance.LogVerbose($"register item {r.Item.ID} in {pod.ID}");
                 }
-                //stationRequests.Remove(pod);
+                stationRequests.Remove(pod);
             }
 
             return requests;
@@ -466,10 +400,6 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// Contains the number of assignments done.
         /// </summary>
         private double _statAssignments = 0;
-        /// <summary>
-        /// The index of the pod matching scorer.
-        /// </summary>
-        private int _statFullySuppliedScoreIndex = -1;
         /// <summary>
         /// The callback indicates a reset of the statistics.
         /// </summary>
