@@ -1007,30 +1007,6 @@ namespace RAWSimO.Visualization
                 ParseSetting();
                 ParseConfiguration();
                 ParseLayoutConfiguration();
-
-                // Check if Fully-Supplied is used with Fully-Demand. But not vice versa.
-                // Because it won't assign any order before any pod is assigned.
-                if (_controlConfiguration.TaskAllocationConfig.GetType() == typeof(BalancedTaskAllocationConfiguration))
-                {
-                    var cfg = _controlConfiguration.TaskAllocationConfig as BalancedTaskAllocationConfiguration;
-                    if (_controlConfiguration.OrderBatchingConfig.GetType() == typeof(FullySuppliedOrderBatchingConfiguration) && 
-                        cfg.PodSelectionConfig.GetType() != typeof(FullyDemandPodSelectionConfiguration))
-                        throw new ArgumentException("Fully-Supplied POA has to be used with Fully-Demand PPS");
-                }
-                else if (_controlConfiguration.TaskAllocationConfig.GetType() == typeof(SwarmTaskAllocationConfiguration))
-                {
-                    var cfg = _controlConfiguration.TaskAllocationConfig as SwarmTaskAllocationConfiguration;
-                    if (_controlConfiguration.OrderBatchingConfig.GetType() == typeof(FullySuppliedOrderBatchingConfiguration) && 
-                        cfg.PodSelectionConfig.GetType() != typeof(FullyDemandPodSelectionConfiguration))
-                        throw new ArgumentException("Fully-Supplied POA has to be used with Fully-Demand PPS");
-                }
-                else if (_controlConfiguration.TaskAllocationConfig.GetType() == typeof(ConstantRatioTaskAllocationConfiguration))
-                {
-                    var cfg = _controlConfiguration.TaskAllocationConfig as ConstantRatioTaskAllocationConfiguration;
-                    if (_controlConfiguration.OrderBatchingConfig.GetType() == typeof(FullySuppliedOrderBatchingConfiguration) && 
-                        cfg.PodSelectionConfig.GetType() != typeof(FullyDemandPodSelectionConfiguration))
-                        throw new ArgumentException("Fully-Supplied POA has to be used with Fully-Demand PPS");
-                }
                 
                 // Find the specified word-list file
                 if (_baseConfiguration.InventoryConfiguration.ColoredWordConfiguration != null)
