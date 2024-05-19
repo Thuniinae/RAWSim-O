@@ -126,9 +126,10 @@ namespace RAWSimO.Core.Management
         private HashSet<Waypoint> _usedPodStorageLocations = new HashSet<Waypoint>();
 
         /// <summary>
-        /// All pod storage locations currently not in use.
+        /// All pod storage locations currently not in use and without bots 
+        /// (to prevent assigning pod storage location where the pod is picked but hasn't leave).
         /// </summary>
-        public IEnumerable<Waypoint> UnusedPodStorageLocations { get { return _unusedPodStorageLocations; } }
+        public IEnumerable<Waypoint> UnusedPodStorageLocations { get { return _unusedPodStorageLocations.ExceptWithNew(_instance.Bots.Select(b => b.CurrentWaypoint));} }
 
         /// <summary>
         /// All pod storage locations currently in use.
