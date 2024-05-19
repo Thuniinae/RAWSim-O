@@ -1673,7 +1673,11 @@ namespace RAWSimO.Core.Control
                                     // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
                                     double endTime = pathManager.findPath(bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false); 
                                     endTime = pathManager.findPath(bot, endTime, pod.Waypoint, pod.Waypoint, false); 
-                                    return scores[pod].Item2 / endTime + scores[pod].Item2*Instance.LayoutConfig.ItemPickTime; // estimated station item throughput rate
+                                    // estimated station item throughput rate, consider item picking time of pods in queue, but ignore other pods not in queue yet
+                                    return scores[pod].Item2 / (Math.Max(endTime, 
+                                                                         oStation.InboundPods.Where(p => p.Bot != null && p.Bot.IsQueueing)
+                                                                                             .Sum(p => p.CountRegisterItems()) * Instance.LayoutConfig.ItemPickTime) 
+                                                                + scores[pod].Item2 * Instance.LayoutConfig.ItemPickTime); 
                                 });
                         var possibleOrders = scores[bestPod].Item1;
                         // make sure at least one pod is assigned, 

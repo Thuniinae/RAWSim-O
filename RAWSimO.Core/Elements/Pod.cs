@@ -192,6 +192,14 @@ namespace RAWSimO.Core.Elements
         {
             _itemDescriptionCountAvailable[item]++;
         }
+        /// <summary>
+        /// Count the total number of items registered to be pick in this pod.
+        /// </summary>
+        /// <returns>The number of extract requests.</returns>
+        public int CountRegisterItems()
+        {
+            return _extractRequestsRegistered.Count;
+        }
 
         /// <summary>
         /// Adds the specified bundle of item to the pod.
