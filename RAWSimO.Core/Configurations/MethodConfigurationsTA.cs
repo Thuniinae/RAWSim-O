@@ -151,7 +151,10 @@ namespace RAWSimO.Core.Configurations
             return true;
 
         }
-
+        /// <summary>
+        /// If true, allocate bots to output station without orders.
+        /// </summary>
+        public bool overrideOutputStationActivity = true;
         /// <summary>
         /// Timeout between two reallocation runs. Set this to 0 to disable reallocation at all.
         /// </summary>

@@ -115,7 +115,7 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
         {
             // Check active stations
             List<InputStation> activeInputStations = Instance.InputStations.Where(s => overrideActivity || s.ItemBundles.Any()).ToList();
-            List<OutputStation> activeOutputStations = Instance.OutputStations.Where(s => overrideActivity || s.AssignedOrders.Any()).ToList();
+            List<OutputStation> activeOutputStations = Instance.OutputStations.Where(s => overrideActivity || _config.overrideOutputStationActivity|| s.AssignedOrders.Any()).ToList();
             // Check whether something changed since last time
             IEnumerable<Circle> currentlyActiveStations = activeInputStations.Cast<Circle>().Concat(activeOutputStations);
             if (_lastActiveStations == null)
