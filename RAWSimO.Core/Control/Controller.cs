@@ -3,6 +3,7 @@ using RAWSimO.Core.Control.Defaults.ItemStorage;
 using RAWSimO.Core.Control.Defaults.MethodManagement;
 using RAWSimO.Core.Control.Defaults.OrderBatching;
 using RAWSimO.Core.Control.Defaults.PathPlanning;
+using RAWSimO.Core.Control.Defaults.PodSelection;
 using RAWSimO.Core.Control.Defaults.PodStorage;
 using RAWSimO.Core.Control.Defaults.ReplenishmentBatching;
 using RAWSimO.Core.Control.Defaults.Repositioning;
@@ -49,6 +50,19 @@ namespace RAWSimO.Core.Control
                 case TaskAllocationMethodType.ConstantRatio: BotManager = new ConstantRatioBotManager(instance); break;
                 case TaskAllocationMethodType.Concept: BotManager = new ConceptBotManager(instance); break;
                 default: throw new ArgumentException("Unknown bot manager: " + instance.ControllerConfig.TaskAllocationConfig.GetMethodType());
+            }
+            // Init pod selection manager
+            var PSconfig = instance.ControllerConfig.TaskAllocationConfig.GetPodSelectionConfig();
+            switch(PSconfig?.GetMethodType())
+            {
+                // These methods are implemented in BotMangerPodSelection.cs for compatibility
+                case PodSelectionMethodType.Default:
+                case PodSelectionMethodType.FullyDemand:
+                case PodSelectionMethodType.HADOD:
+                break;
+                case PodSelectionMethodType.SimulatedAnnealing: 
+                    PodSelectionManager = new SimulatedAnnealingPodSelectionManager(instance);
+                break;
             }
             // Init station manager
             switch (instance.ControllerConfig.StationActivationConfig.GetMethodType())
@@ -166,6 +180,10 @@ namespace RAWSimO.Core.Control
         /// The bot manager.
         /// </summary>
         public BotManager BotManager { get; private set; }
+        /// <summary>
+        /// The pod selection manager.
+        /// </summary>
+        public PodSelectionManager PodSelectionManager{ get; private set; }
         /// <summary>
         /// The path planner.
         /// </summary>

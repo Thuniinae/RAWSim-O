@@ -661,6 +661,13 @@ namespace RAWSimO.Core.Configurations
             }
             return name;
         }
+    
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.Default;}
+        
     }
 
     /// <summary>
@@ -717,6 +724,12 @@ namespace RAWSimO.Core.Configurations
         {
             return "FullyDemandPodSelection";
         }
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.FullyDemand;}
+
     }
     /// <summary>
     /// Exposes parameters for the default selection of pods. 
@@ -799,6 +812,11 @@ namespace RAWSimO.Core.Configurations
         {
             return "HADODPodSelection";
         }
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.HADOD;}
     }
 
     /// <summary>
@@ -806,6 +824,10 @@ namespace RAWSimO.Core.Configurations
     /// </summary>
     public class SimulatedAnnealingPodSelectionConfiguration : PodSelectionConfiguration
     {
+        /// <summary>
+        /// The time period in second between running Simulated Annealing.
+        /// </summary>
+        public double updatePeriod = 1.0;
         /// <summary>
         /// Initial temperature of Simulated Annealing Algorithm
         /// </summary>
@@ -871,6 +893,11 @@ namespace RAWSimO.Core.Configurations
         {
             return "SimulatedAnnealingPodSelection";
         }
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.SimulatedAnnealing;}
     }
     #endregion
 

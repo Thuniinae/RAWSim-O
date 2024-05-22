@@ -116,6 +116,28 @@ namespace RAWSimO.Core.Configurations
         Concept,
     }
     /// <summary>
+    /// ll types of implemented pod selection strategies.
+    /// </summary>
+    public enum PodSelectionMethodType
+    {
+        /// <summary>
+        /// A method using pod scorers.
+        /// </summary>
+        Default,
+        /// <summary>
+        /// FullyDemand
+        /// </summary>
+        FullyDemand,
+        /// <summary>
+        /// HADOD
+        /// </summary>
+        HADOD,
+        /// <summary>
+        /// A simulated annealing method that considers both Fully-Supplied and path planning.
+        /// </summary>
+        SimulatedAnnealing,
+    }
+    /// <summary>
     /// All types of implemented station activation strategies.
     /// </summary>
     public enum StationActivationMethodType
@@ -605,6 +627,27 @@ namespace RAWSimO.Core.Configurations
             errorMessage = "";
             return true;
         }
+        /// <summary>
+        /// Returns the configuration of the pod selection method in task allocation if exist.
+        /// </summary>
+        /// <returns>null if not exist.</returns>
+        public virtual PodSelectionConfiguration GetPodSelectionConfig()
+        {
+            switch(GetMethodType())
+            {
+                case TaskAllocationMethodType.Balanced: 
+                    var TAconfig = this as BalancedTaskAllocationConfiguration;
+                    return TAconfig.PodSelectionConfig;
+                case TaskAllocationMethodType.ConstantRatio:
+                    var CRconfig = this as ConstantRatioTaskAllocationConfiguration;
+                    return CRconfig.PodSelectionConfig;
+                case TaskAllocationMethodType.Swarm:
+                    var SWconfig = this as SwarmTaskAllocationConfiguration;
+                    return SWconfig.PodSelectionConfig;
+                default:
+                    return null;
+            }
+        }
     }
     /// <summary>
     /// Dummy class for selection of pod selection in task allocation configs
@@ -613,7 +656,14 @@ namespace RAWSimO.Core.Configurations
     [XmlInclude(typeof(FullyDemandPodSelectionConfiguration))]
     [XmlInclude(typeof(HADODPodSelectionConfiguration))]
     [XmlInclude(typeof(SimulatedAnnealingPodSelectionConfiguration))]
-    abstract public class PodSelectionConfiguration : ControllerConfigurationBase{}
+    abstract public class PodSelectionConfiguration : ControllerConfigurationBase
+    {
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public abstract PodSelectionMethodType GetMethodType();
+    }
     /// <summary>
     /// Base class for the station activation configuration.
     /// </summary>
