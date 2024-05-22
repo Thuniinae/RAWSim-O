@@ -61,20 +61,13 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         /// <summary>
         /// Find single path and time cost of a bot, using current reservation table.
         /// </summary>
-        /// <param name="bot"></param>
-        /// <param name="currentTime"></param>
-        /// <param name="startWaypoint"></param>
-        /// <param name="endWaypoint"></param>
-        /// <param name="carryingPod"></param>
-        /// <returns>Ending time of the path found, equals to double.MaxValue if path not found.</returns>
-        override public double findPath(Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        /// <returns>false, if no path can be found.</returns>
+        override public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             Agent agent;
             getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
             var method = PathFinder as WHCAvStarMethod;
-            double endTime;
-            method.findPath(out endTime, currentTime, agent);
-            return endTime;
+            return method.findPath(out endTime, currentTime, agent);
         }
     }
 }

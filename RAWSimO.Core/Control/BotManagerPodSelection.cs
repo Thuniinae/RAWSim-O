@@ -1,4 +1,4 @@
-﻿using RAWSimO.Core.Configurations;
+using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
@@ -1671,8 +1671,12 @@ namespace RAWSimO.Core.Control
                         var bestPod = scores.OrderByDescending(d => d.Value.Item2).Take(config.searchPodNum).Select(d => d.Key).
                                 ArgMax(pod => {
                                     // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
-                                    double endTime = pathManager.findPath(bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false); 
-                                    endTime = pathManager.findPath(bot, endTime, pod.Waypoint, pod.Waypoint, false); 
+                                    double endTime;
+                                    if(!pathManager.findPath(out endTime, bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false))
+                                        return 0; // can't find path
+                                    if(!pathManager.findPath(out endTime, bot, endTime, pod.Waypoint, oStation.Waypoint, true))
+                                        return 0; // can't find path
+                                    //double endTime = Distances.CalculateShortestPathPodSafe(pod.Waypoint, oStation.Waypoint, Instance);
                                     // estimated station item throughput rate, consider item picking time of pods in queue, but ignore other pods not in queue yet
                                     return scores[pod].Item2 / (Math.Max(endTime, 
                                                                          oStation.InboundPods.Where(p => p.Bot != null && p.Bot.IsQueueing)

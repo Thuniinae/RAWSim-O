@@ -205,12 +205,9 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             return conflictFree;
         }
         /// <summary>
-        /// Find path of an agent and the ending time of the path, using current reservation table.
+        /// Find single path and time cost of a bot, using current reservation table.
         /// </summary>
-        /// <param name="endTime"></param>
-        /// <param name="currentTime"></param>
-        /// <param name="agent"></param>
-        /// <returns></returns>
+        /// <returns>false, if no path can be found.</returns>
         public bool findPath(out double endTime, double currentTime, Agent agent)
         {
             if (agent != null) 

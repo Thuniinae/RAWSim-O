@@ -258,35 +258,38 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
 
         }
         /// <summary>
-        /// Find path of an agent and the ending time of the path, using current reservation table.
+        /// Find single path and time cost of a bot, using current reservation table.
         /// </summary>
-        /// <param name="currentTime"></param>
-        /// <param name="agent"></param>
-        /// <returns></returns>
-        public double findPath(double currentTime, Agent agent)
+        /// <returns>false, if no path can be found.</returns>
+        public bool findPath(out double endTime, double currentTime, Agent agent)
         {
             if (agent != null) 
             {
-                //Create RRA* search if necessary.
-                //Necessary if the agent has none or the agents destination has changed
-                ReverseResumableAStar rraStar;
-                if (!rraStars.TryGetValue(agent.ID, out rraStar) || rraStar.StartNode != agent.DestinationNode ||
-                    UseDeadlockHandler && _deadlockHandler.IsInDeadlock(agent, currentTime)) // TODO this last expression is used to set back the state of the RRA* in case of a deadlock - this is only a hotfix
+                if (!UseBias)
                 {
-                    rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
+                    //Create RRA* search if necessary.
+                    //Necessary if the agent has none or the agents destination has changed
+                    ReverseResumableAStar rraStar;
+                    if (!rraStars.TryGetValue(agent.ID, out rraStar) || rraStar == null || rraStar.StartNode != agent.DestinationNode ||
+                        UseDeadlockHandler && _deadlockHandler.IsInDeadlock(agent, currentTime)) // TODO this last expression is used to set back the state of the RRA* in case of a deadlock - this is only a hotfix
+                        rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
                 }
 
                 //search my path to the goal
                 var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, currentTime + LengthOfAWindow, _reservationTable, agent, rraStars[agent.ID]);
+                aStar.FinalReservation = true;
+                //execute
                 var found = aStar.Search();
                 if(found) 
                 {
                     List<ReservationTable.Interval> reservations;
                     aStar.GetPathAndReservations(ref agent.Path, out reservations);
-                    return reservations.Last().End;
+                    endTime = reservations.Last().End;
+                    return true;
                 }
             }
-            return double.MaxValue;
+            endTime = double.MaxValue;
+            return false;
         }
     }
 }
