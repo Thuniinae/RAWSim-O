@@ -434,7 +434,7 @@ namespace RAWSimO.Core.Control
                 OrientationAtNextNode = bot.GetTargetOrientation(),
                 DestinationNode = _waypointIds[destination],
                 FinalDestinationNode = _waypointIds[finalDestination],
-                Path = bot.Path, //path reference => will be filled
+                Path = new Path(), //path reference => will be filled
                 FixedPosition = bot.hasFixedPosition(),
                 Resting = bot.IsResting(),
                 CanGoThroughObstacles = Instance.ControllerConfig.PathPlanningConfig.CanTunnel && !carryingPod,

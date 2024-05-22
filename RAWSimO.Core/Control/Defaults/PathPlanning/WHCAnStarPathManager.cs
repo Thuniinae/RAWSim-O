@@ -76,7 +76,6 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
             getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
             var method = PathFinder as WHCAnStarMethod;
             var success = method.findPath(out endTime, currentTime, agent);
-            var windowTime = endTime;
             if (success){
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
