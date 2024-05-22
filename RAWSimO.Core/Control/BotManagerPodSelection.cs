@@ -1,4 +1,4 @@
-using RAWSimO.Core.Configurations;
+﻿using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
@@ -1534,7 +1534,7 @@ namespace RAWSimO.Core.Control
         
         private void SimulatedAnnealingPodSelection(SimulatedAnnealingPodSelectionConfiguration config)
         {
-            // can consider pod item throughput rate first as simple solution
+
 
             // initialize the temperature
             int temp = config.initTemp;
@@ -1547,9 +1547,16 @@ namespace RAWSimO.Core.Control
             // 2. triggered situation: 
                 // 1. station with capacity, what if there is only one?-> find best priority of the pod
                 // 2. need to have unused bot for station or need to know ending time of the bot
+                // 3. every second (maybe will be unnecessary if  other trigger situation is well set)
+                // 4.  more than ? stations has capacity left or hasn't has bot pre-plan (to increase planning efficiency)
             // 3. need to know the task allocation of bots (or just assume rest possible is at middle, which often happens when there are lots of bots)
             // 4. station need to have at least ond pod that can fully-fulfilled an order
             // 5. penalty time of possible collision
+            // 6. need to be able to preplan bot to pod selection to preplan pod selection for each station even when there are no pod available, 
+            // can make use of inbound pod, increase pile on , and make use of station capacity, therefore
+            // SA should be executed when there are more than ? stations has capacity left or hasn't has bot pre-plan
+                // 1. problem is bot may be reallocated -> stop bot from resting
+                // 2. need know next bot available for the station
 
             // Inputs: 
             // 1. location of unused pods
@@ -1568,7 +1575,7 @@ namespace RAWSimO.Core.Control
             // Iterations:
             // 1. Generate new solution (orders allocated, pod selected, pod priority)
                 // 1. Decide explore(2.1) or exploit(3.1) (?%)
-                // 2.1 random pick a station
+                // 2.1 random pick a station (station hasn't pick has higher chance, then station with less possible pod)
                 // 2.2 random(distribution?, can let pod with higher item throughput rate has higher probability) pick a pod in search space of the station
                 // 2.3 if the selected pod is already assigned to other station, then back to 2.2
                 // 2.4 skip 3
@@ -1576,8 +1583,9 @@ namespace RAWSimO.Core.Control
                 // 3.1 go to 2.1 if no pod bypass (don't have shortest path) (is this necessary?)
                 // 3.2 swap priority of a pod which bypass at least once with the pod it by pass 
                 // (doesn't this only improve efficiency of path planning, which already been researched)
-                // 4. replan all new(?, should be better assuming old pod movement has higher priority) pod
+                // 4. replan all new(fit with WHCAn*, which only replan with, should be better assuming old pod movement has higher priority) pod
                 // (as the number of output station, should be fast)
+                // 4.alternative or estimated pod arrival time by collision (only needed, if 4 has poor result or spend too much time)
             // 2. Calculate new solution with sum of item throughput rate of picking all items of all stations
             // 3. if exp((new - current item throughput) / T) > random(0, 1) , current = new solution
             // 4. Decrease temperature
@@ -1669,20 +1677,20 @@ namespace RAWSimO.Core.Control
                         }
                         // only consider top searchPodNum pods of the score
                         var bestPod = scores.OrderByDescending(d => d.Value.Item2).Take(config.searchPodNum).Select(d => d.Key).
-                                ArgMax(pod => {
+                                OrderByDescending(pod => {
                                     // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
                                     double endTime;
                                     if(!pathManager.findPath(out endTime, bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false))
                                         return 0; // can't find path
+                                    endTime += Instance.LayoutConfig.PodTransferTime;
                                     if(!pathManager.findPath(out endTime, bot, endTime, pod.Waypoint, oStation.Waypoint, true))
                                         return 0; // can't find path
-                                    //double endTime = Distances.CalculateShortestPathPodSafe(pod.Waypoint, oStation.Waypoint, Instance);
                                     // estimated station item throughput rate, consider item picking time of pods in queue, but ignore other pods not in queue yet
-                                    return scores[pod].Item2 / (Math.Max(endTime, 
+                                    return scores[pod].Item2 / (Math.Max(endTime-Instance.Controller.CurrentTime, 
                                                                          oStation.InboundPods.Where(p => p.Bot != null && p.Bot.IsQueueing)
                                                                                              .Sum(p => p.CountRegisterItems()) * Instance.LayoutConfig.ItemPickTime) 
                                                                 + scores[pod].Item2 * Instance.LayoutConfig.ItemPickTime); 
-                                });
+                                }).ThenByDescending(pod => scores[pod].Item2).First(); // break tie by score
                         var possibleOrders = scores[bestPod].Item1;
                         // make sure at least one pod is assigned, 
                         if (possibleOrders.Count > 0)
