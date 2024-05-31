@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -43,6 +43,23 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
             _intervalEnds = new List<double>();
             _intervalAgentId = storeAgentIds ? new List<int>() : null;
             _intervalPrio = storePrios ? new List<int>() : null;
+        }
+
+        public DisjointIntervalTree(List<double> intervalStart, List<double> intervalEnds, List<int> intervalAgentId, List<int> intervalPrio)
+        {
+            _intervalStart = new(intervalStart);
+            _intervalEnds = new(intervalEnds);
+            if (intervalAgentId != null) _intervalAgentId = new(intervalAgentId);
+            if (intervalPrio != null) _intervalPrio = new(intervalPrio);
+        }
+
+        /// <summary>
+        /// Return a new DisjointIntervalTree with same contents
+        /// </summary>
+        /// <returns></returns>
+        public DisjointIntervalTree DeepCopy()
+        {
+            return new DisjointIntervalTree(_intervalStart, _intervalEnds, _intervalAgentId, _intervalPrio);
         }
 
         /// <summary>

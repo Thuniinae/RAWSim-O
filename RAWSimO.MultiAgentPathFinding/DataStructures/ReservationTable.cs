@@ -1,4 +1,4 @@
-﻿using RAWSimO.MultiAgentPathFinding.Elements;
+using RAWSimO.MultiAgentPathFinding.Elements;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -58,6 +58,31 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
             _intervallTrees = new DisjointIntervalTree[graph.NodeCount];
             if (fastClear)
                 _touchedNodes = new HashSet<int>();
+        }
+
+        public ReservationTable(Graph graph, DisjointIntervalTree[] intervalTree, 
+            HashSet<int> touchedNodes, bool storeAgentIds, bool storePrios)
+        {
+            _graph = graph;
+            _intervallTrees = intervalTree;
+            _touchedNodes = touchedNodes;
+            _storeAgentIds = storeAgentIds;
+            _storePrios = storePrios;
+        }
+
+        /// <summary>
+        /// Return a deep copied ReservationTable.
+        /// </summary>
+        /// <returns></returns>
+        public ReservationTable DeepCopy()
+        {
+            var trees = new DisjointIntervalTree[_graph.NodeCount];
+            for(var node = 0; node < _graph.NodeCount; node++)
+            {
+                if(_intervallTrees[node] != null) 
+                    trees[node] = _intervallTrees[node].DeepCopy();
+            }
+            return new ReservationTable(_graph, trees, new HashSet<int>(_touchedNodes), _storeAgentIds, _storePrios);
         }
 
         /// <summary>
