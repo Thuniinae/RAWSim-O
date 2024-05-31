@@ -1,4 +1,4 @@
-using RAWSimO.Core.Configurations;
+﻿using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
@@ -2083,8 +2083,6 @@ namespace RAWSimO.Core.Control
         /// Contains the number of assignments done.
         /// </summary>
         private double _statIStationForPodAssignments = 0;
-        private double _statSinglePodNum = 0;
-        private double _statPodSetNum = 0;
         /// <summary>
         /// The callback indicates a reset of the statistics.
         /// </summary>
