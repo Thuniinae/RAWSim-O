@@ -330,6 +330,9 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 if(!_scheduledPath.ContainsKey(agent.ID))
                 {
                     _scheduledPath[agent.ID] = new List<ReservationTable.Interval>(_calculatedReservations[agent.ID]);
+                    // remove reservation of the starting point, because WHCAn* will reserve the ending waypoint of the existed path of the bot
+                    var interval = _scheduledTable.Get(agent.NextNode, startTime, startTime + LengthOfAWindow);
+                    if(interval != null) _scheduledTable.Remove(interval); // since only scheduling, no need to add back
                 }
                 // ignore the bot's path for now
                 if(overwrite) _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
