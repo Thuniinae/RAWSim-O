@@ -99,7 +99,7 @@ namespace RAWSimO.Core.Control
         /// </summary>
         /// <param name="order">The order that is going to be allocated.</param>
         /// <param name="station">The station the order is assigned to.</param>
-        protected void AllocateOrder(Order order, OutputStation station)
+        public void AllocateOrder(Order order, OutputStation station)
         {
             // Update lists
             _pendingOrders.Remove(order);
