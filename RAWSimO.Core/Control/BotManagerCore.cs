@@ -1,6 +1,7 @@
-using RAWSimO.Core.Bots;
+﻿using RAWSimO.Core.Bots;
 using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
+using RAWSimO.Core.Geometrics;
 using RAWSimO.Core.Interfaces;
 using RAWSimO.Core.Items;
 using RAWSimO.Core.Management;
@@ -33,6 +34,10 @@ namespace RAWSimO.Core.Control
         /// All task queues of the robots.
         /// </summary>
         private Dictionary<Bot, BotTask> _taskQueues = new Dictionary<Bot, BotTask>();
+        /// <summary>
+        /// Queues that store the future tasks of the robots 
+        /// </summary>
+        private Dictionary<Bot, List<BotTask>> _futureTasksQueues = new();
         /// <summary>
         /// The last task that was assigned to the bot.
         /// </summary>
@@ -118,9 +123,28 @@ namespace RAWSimO.Core.Control
                     }
                 }
             }
+            // deal with task in future queue, which hasn't turn task to state queue
+            foreach(var t in _futureTasksQueues.Values.SelectMany(q => q))
+            {
+                if(t.Type == BotTaskType.Extract)
+                {
+                    ExtractTask task = t as ExtractTask;
+                    if (task.ReservedPod == pod)
+                    {
+                        success = true;
+                        // direct add request to the task, because task hasn't turn to state queue
+                        task.Requests.AddRange(requests);
+                        foreach(var r in requests)
+                        {
+                            Instance.ResourceManager.RemoveExtractRequest(r);
+                            pod.RegisterItem(r.Item, r);
+                        }
+                        break;
+                    }
+                }
+            }
             if (!success)
-                throw new Exception("can not find bot with the pod in tasks.");
-            
+                throw new Exception($"can not find bot with pod {pod.ID} in tasks.");
         }
         /// <summary>
         /// Enqueues an insertion task.
@@ -344,10 +368,20 @@ namespace RAWSimO.Core.Control
             {
                 // Measure time for fetching the task
                 DateTime before = DateTime.Now;
-
-                // No tasks available - get the next task
-                GetNextTask(bot);
-
+                // get task from queue
+                if(_futureTasksQueues.ContainsKey(bot) && _futureTasksQueues[bot].Count > 0)
+                {
+                    // If we still carry a pod at this point, get rid of it
+                    if (!DoParkPodTask(bot))
+                    {
+                        _taskQueues[bot] = _futureTasksQueues[bot].First();
+                        _futureTasksQueues[bot].RemoveAt(0);
+                    }
+                }
+                else{
+                    // No tasks available - get the next task
+                    GetNextTask(bot);
+                }
                 // Calculate time it took to decide the next task to do
                 Instance.Observer.TimeTaskAllocation((DateTime.Now - before).TotalSeconds);
             }
@@ -363,6 +397,46 @@ namespace RAWSimO.Core.Control
                 // No tasks available - assign dummy task
                 bot.AssignTask(new DummyTask(Instance, bot));
             }
+        }
+        /// <summary>
+        /// Enqueue a task for a bot for future execution. Override current task if current task is none or rest.
+        /// </summary>
+        public void EnqueueTask(Bot bot, BotTask task)
+        {
+            task.Prepare();
+
+            // override none or rest task
+            if (bot.CurrentTask.Type == BotTaskType.None || bot.CurrentTask.Type == BotTaskType.Rest)
+            {
+                // need to cancel task, clear state queue and assign new task
+                bot.CurrentTask.Cancel();
+                var b = bot as BotNormal;
+                b.StateQueueClear();
+                bot.AssignTask(task);
+                _taskQueues[bot] = task;
+            }
+            else
+            {
+                if(!_futureTasksQueues.ContainsKey(bot)) // init if haven't
+                                _futureTasksQueues[bot] = new List<BotTask>();
+                _futureTasksQueues[bot].Add(task);
+            }
+            _lastTaskEnqueued[bot] = task;
+        }
+        /// <summary>
+        /// Count the number of future tasks of the bot
+        /// </summary>
+        /// <param name="bot"></param>
+        /// <returns></returns>
+        public int CountFutureTasks(Bot bot)
+        {
+            int result = 0;
+            if(_futureTasksQueues.ContainsKey(bot))
+                foreach(var t in _futureTasksQueues[bot])
+                {
+                    if(t.Type != BotTaskType.None) result++;
+                }
+            return result;
         }
 
         /// <summary>

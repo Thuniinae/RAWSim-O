@@ -110,7 +110,7 @@ namespace RAWSimO.Core.Bots
         /// <summary>
         /// Clears the complete state queue.
         /// </summary>
-        private void StateQueueClear() { _stateQueue.Clear(); _currentInfoStateName = ""; }
+        public void StateQueueClear() { _stateQueue.Clear(); _currentInfoStateName = ""; }
         /// <summary>
         /// The number of states currently in the queue.
         /// </summary>
