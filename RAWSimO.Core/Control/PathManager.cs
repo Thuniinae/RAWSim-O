@@ -470,11 +470,29 @@ namespace RAWSimO.Core.Control
         /// Estimate ending time of a bot, using reservation table.
         /// </summary>
         /// <returns>Ending time of the path found, equals to double.MaxValue if path not found.</returns>
-        virtual public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        virtual public bool findPath(out double endTime, double currentTime,
+            Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             throw new Exception($"{this.GetType()} do not support findPath function!");
         }
+        
+        /// <summary>
+        /// Find path based on schedule table, will add path to schedule table if success.
+        /// </summary>
+        /// <returns>false, if can't find path</returns>
+        virtual public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        {
+            throw new Exception($"{this.GetType()} do not support schedulePath function!");
+        }
 
+        /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        virtual public void scheduleInit()
+        {
+            throw new Exception($"{this.GetType()} do not support schedulePath function!");
+        }
         #region IUpdateable Members
 
         /// <summary>

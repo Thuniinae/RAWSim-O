@@ -384,6 +384,29 @@ namespace RAWSimO.Core.Elements
         {
             return _inboundPods.Sum(pod => pod.CountAvailable(item));   
         }
+        private double _lastUpdateQueueTime = 0;
+        private double _currentQueueTime = 0;
+        /// <summary>
+        /// Get the time cost to finish picking all the pods that are currently in the station's queue.
+        /// </summary>
+        /// <returns></returns>
+        public double GetCurrentQueueTime()
+        {
+            if (_lastUpdateQueueTime < Instance.Controller.CurrentTime)
+                _currentQueueTime = this.InboundPods
+                    .Where(p => p.Bot != null && p.Bot.IsQueueing).
+                    Sum(p => Math.Max(p.CountRegisterItems()* Instance.LayoutConfig.ItemPickTime,
+                    Instance.LayoutConfig.ItemTransferTime)) ;
+            return _currentQueueTime;
+        }
+        /// <summary>
+        /// Count the number of registered items of he pods that are currently in the station's queue.
+        /// </summary>
+        /// <returns></returns>
+        public int CountCurrentQueueItem()
+        {
+            return this.InboundPods.Where(p => p.Bot != null && p.Bot.IsQueueing).Sum(p => p.CountRegisterItems());
+        }
 
         /// <summary>
         /// All extract tasks that are currently carried out by robots for this station.
@@ -631,7 +654,6 @@ namespace RAWSimO.Core.Elements
 
             if (RemoveAnyCompletedOrder(currentTime) != null)
                 return;
-
             if (TakeItemFromPod(currentTime))
                 return;
         }

@@ -1556,7 +1556,7 @@ namespace RAWSimO.Core.Control
             else
             {
                 var PodSelectionManager = Instance.Controller.PodSelectionManager as SimulatedAnnealingPodSelectionManager;
-                var success = PodSelectionManager.GreedyMethod(out Pod selectedPod, out List<ExtractRequest> extractRequests, bot, oStation);
+                var success = PodSelectionManager.GetResult(out Pod selectedPod, out List<ExtractRequest> extractRequests, bot, oStation);
                 if (success)
                 {
                     EnqueueExtract(
@@ -2083,8 +2083,6 @@ namespace RAWSimO.Core.Control
         /// Contains the number of assignments done.
         /// </summary>
         private double _statIStationForPodAssignments = 0;
-        private double _statSinglePodNum = 0;
-        private double _statPodSetNum = 0;
         /// <summary>
         /// The callback indicates a reset of the statistics.
         /// </summary>
@@ -2118,6 +2116,16 @@ namespace RAWSimO.Core.Control
                 scoreInfos.Add("IForP" + IOConstants.DELIMITER_CUSTOM_CONTROLLER_FOOTPRINT + string.Join(IOConstants.DELIMITER_CUSTOM_CONTROLLER_FOOTPRINT.ToString(),
                     _statIStationForPodScorerValues.Select(e => e / _statIStationForPodAssignments).Select(e => e.ToString(IOConstants.FORMATTER))));
             Instance.StatCustomControllerInfo.CustomLogPCString = string.Join(IOConstants.DELIMITER_CUSTOM_CONTROLLER_FOOTPRINT.ToString(), scoreInfos);
+        }
+        /// <summary>
+        /// Record the score of a pod when it is selected. Should be called after enqueue an extract task for a bot.
+        /// </summary>
+        public void logPodAssignment(double score = 1.0)
+        {
+            _statPodForOStationAssignments++;
+            Instance.StatCustomControllerInfo.CustomLogPC1 = score / _statPodForOStationAssignments; // no actual score
+            Instance.StatCustomControllerInfo.CustomLogPC2 = 0;
+            Instance.StatCustomControllerInfo.CustomLogPC3 = 0;
         }
 
         #endregion

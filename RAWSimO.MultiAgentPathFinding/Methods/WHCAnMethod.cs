@@ -1,4 +1,4 @@
-﻿using RAWSimO.MultiAgentPathFinding.Algorithms.AStar;
+using RAWSimO.MultiAgentPathFinding.Algorithms.AStar;
 using RAWSimO.MultiAgentPathFinding.DataStructures;
 using RAWSimO.MultiAgentPathFinding.Elements;
 using RAWSimO.MultiAgentPathFinding.Physic;
@@ -41,6 +41,10 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         /// Reservation Table
         /// </summary>
         public ReservationTable _reservationTable;
+
+        public ReservationTable _scheduledTable;
+
+        private Dictionary<int, List<ReservationTable.Interval>> _scheduledPath;
 
         /// <summary>
         /// The calculated reservations
@@ -268,6 +272,11 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         {
             if (agent != null) 
             {
+                // store reservation
+                var interval = _reservationTable.Get(agent.NextNode, currentTime, currentTime + LengthOfAWindow);
+                // remove reservation of the starting point, because WHCAn* will reserve the ending waypoint of the existed path of the bot
+                if(interval != null) _reservationTable.Remove(interval);
+                
                 if (!UseBias)
                 {
                     //Create RRA* search if necessary.
@@ -283,6 +292,9 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 aStar.FinalReservation = true;
                 //execute
                 var found = aStar.Search();
+                // Add removed reservation back
+                if(interval != null) _reservationTable.Add(interval);
+
                 if(found) 
                 {
                     List<ReservationTable.Interval> reservations;
@@ -293,6 +305,88 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             }
             endTime = double.MaxValue;
             return false;
+        }
+    
+        /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        public void scheduleInit()
+        {
+            // copy reservation table
+            _scheduledTable = _reservationTable.DeepCopy();
+            _scheduledPath = new();
+        }
+        /// <summary>
+        /// Find path based on schedule table, will add path to schedule table if success.
+        /// </summary>
+        /// <returns>false, if can't find path</returns>
+        public bool schedulePath(out double endTime, double startTime, Agent agent)
+        {
+            // !!TODO: add append mode to preserve the previous path
+            if (agent != null) 
+            {
+                // init schedule path of the agent
+                if(!_scheduledPath.ContainsKey(agent.ID))
+                {
+                    _scheduledPath[agent.ID] = new List<ReservationTable.Interval>(_calculatedReservations[agent.ID]);
+                    // remove the reservation of last node from last time to infinity of previous path
+                    if(_calculatedReservations[agent.ID].Count > 0)
+                        _scheduledPath[agent.ID].RemoveAt(_calculatedReservations[agent.ID].Count - 1);
+                }
+                // ignore the bot's path for now
+                _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
+                
+                if (!UseBias)
+                {
+                    //Create RRA* search if necessary.
+                    //Necessary if the agent has none or the agents destination has changed
+                    ReverseResumableAStar rraStar;
+                    if (!rraStars.TryGetValue(agent.ID, out rraStar) || rraStar == null || rraStar.StartNode != agent.DestinationNode ||
+                        UseDeadlockHandler && _deadlockHandler.IsInDeadlock(agent, startTime)) // TODO this last expression is used to set back the state of the RRA* in case of a deadlock - this is only a hotfix
+                        rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
+                }
+
+                //search my path to the goal (within time window)
+                var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, startTime + LengthOfAWindow, _scheduledTable, agent, rraStars[agent.ID]);
+                aStar.FinalReservation = true;
+                //execute
+                var found = aStar.Search();
+
+                if(found) 
+                {
+                    aStar.GetPathAndReservations(ref agent.Path, out List<ReservationTable.Interval> reservations);
+                    endTime = reservations.Last().End;
+                    _scheduledPath[agent.ID] = reservations;
+                    _scheduledTable.Add(_scheduledPath[agent.ID]);
+                    return true;
+                }
+                else // add ignore bot's path back if not found
+                    _scheduledTable.Add(_scheduledPath[agent.ID]);
+            }
+            endTime = double.MaxValue;
+            return false;
+        }
+
+        private void addScheduledPath(Agent agent,  List<ReservationTable.Interval> reservations)
+        {
+            int ii = 0;
+            foreach(var r in reservations)
+            {
+                try
+                {
+                    _scheduledTable.Add(r);
+                }
+                catch(Exception ex)
+                {
+                    System.Console.WriteLine(ex.Message);
+                    throw new Exception($"failed addScheduledPath at {ii}/{reservations.Count}");
+                }
+                ii++;
+            }
+            // store reservations for agent for later removal
+            if(!_scheduledPath.ContainsKey(agent.ID)) _scheduledPath[agent.ID] = reservations;
+            else _scheduledPath[agent.ID].AddRange(reservations);
         }
     }
 }

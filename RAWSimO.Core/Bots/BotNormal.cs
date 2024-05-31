@@ -1,4 +1,4 @@
-﻿using RAWSimO.Core.Control;
+using RAWSimO.Core.Control;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Waypoints;
 using RAWSimO.MultiAgentPathFinding;
@@ -110,7 +110,7 @@ namespace RAWSimO.Core.Bots
         /// <summary>
         /// Clears the complete state queue.
         /// </summary>
-        private void StateQueueClear() { _stateQueue.Clear(); _currentInfoStateName = ""; }
+        public void StateQueueClear() { _stateQueue.Clear(); _currentInfoStateName = ""; }
         /// <summary>
         /// The number of states currently in the queue.
         /// </summary>
@@ -379,6 +379,64 @@ namespace RAWSimO.Core.Bots
             // Track task count
             StatAssignedTasks++;
             StatTotalTaskCounts[t.Type]++;
+        }
+        
+        /// <summary>
+        /// Estimated the finished time of all the states in the queue.
+        /// </summary>
+        /// <returns>false, if no path can be found for BotMove state.</returns>
+        public bool EstimateFinishedTime(out double endTime)
+        {
+            double startTime = Instance.Controller.CurrentTime;
+            endTime = startTime; // equals to current time if state queue is empty
+            foreach(var state in _stateQueue)
+            {
+                switch(state.Type)
+                {
+                    case BotStateType.Move:
+                        var success = Instance.Controller.PathManager.findPath(out endTime,  startTime, this, this.CurrentWaypoint, this.DestinationWaypoint, this.Pod != null);
+                        if (!success) return false;
+                        break;
+                    case BotStateType.PickupPod:
+                    case BotStateType.SetdownPod:
+                        endTime = startTime + this.PodTransferTime;
+                        break;
+                    case BotStateType.GetItems:
+                        var gtState = state as BotGetItems;
+                        endTime = startTime + gtState.ItemCount * Instance.LayoutConfig.ItemPickTime;
+                        break;
+                    case BotStateType.PutItems:
+                        var ptState = state as BotPutItems;
+                        endTime = startTime + ptState.ItemCount * Instance.LayoutConfig.ItemPickTime;
+                        break;
+                    case BotStateType.UseElevator:
+                        var ueState = state as UseElevator;
+                        endTime = startTime + ueState.GetTiming();
+                        break;
+                    case BotStateType.Rest:
+                        endTime = startTime;
+                        break;
+                    default:
+                        throw new Exception("Unknown state for time estimation.");
+                }
+                startTime = endTime;
+            }
+            // add extra time by considering other bots
+            switch(CurrentTask.Type)
+            {
+                case BotTaskType.Extract:
+                    // add extra time for queueing in output station
+                    var exTask = CurrentTask as ExtractTask;
+                    endTime += exTask.OutputStation.GetCurrentQueueTime();
+                break;
+                case BotTaskType.Insert:
+                case BotTaskType.None:
+                case BotTaskType.Rest:
+                case BotTaskType.ParkPod:
+                case BotTaskType.RepositionPod:
+                break;
+            }
+            return true;
         }
 
         /// <summary>
@@ -1301,6 +1359,10 @@ namespace RAWSimO.Core.Bots
             private bool alreadyRequested = false;
             public BotGetItems(InsertTask storeTask) { _storeTask = storeTask; _waypoint = _storeTask.InputStation.Waypoint; }
             public Waypoint DestinationWaypoint { get { return _waypoint; } }
+            /// <summary>
+            /// Count the number of requests in this state.
+            /// </summary>
+            public int ItemCount {get => _storeTask.Requests.Count;}
             public void Act(Bot self, double lastTime, double currentTime)
             {
                 var bot = self as BotNormal;
@@ -1410,6 +1472,10 @@ namespace RAWSimO.Core.Bots
             public BotPutItems(ExtractTask extractTask)
             { _extractTask = extractTask; _waypoint = extractTask.OutputStation.Waypoint; }
             public Waypoint DestinationWaypoint { get { return _waypoint; } }
+            /// <summary>
+            /// Count the number of requests in this state.
+            /// </summary>
+            public int ItemCount {get => _extractTask.Requests.Count;}
             public void Act(Bot self, double lastTime, double currentTime)
             {
                 var bot = self as BotNormal;
@@ -1556,6 +1622,14 @@ namespace RAWSimO.Core.Bots
                     return;
                 }
 
+            }
+            /// <summary>
+            /// Get travel time of this task.
+            /// </summary>
+            /// <returns></returns>
+            public double GetTiming()
+            {
+                return _elevator.GetTiming(_waypointFrom, _waypointTo);
             }
 
             /// <summary>
