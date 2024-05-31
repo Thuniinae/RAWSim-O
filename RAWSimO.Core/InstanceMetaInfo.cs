@@ -126,14 +126,14 @@ namespace RAWSimO.Core
                     _updateables.Add(Controller.BundleManager);
                     _updateables.Add(Controller.Allocator);
                     _updateables.Add(Controller.BotManager);
-                    if (Controller.PodSelectionManager != null)
-                        _updateables.Add(Controller.PodSelectionManager);
                     _updateables.Add(Controller.StationManager);
                     _updateables.Add(Controller.PodStorageManager);
                     _updateables.Add(Controller.RepositioningManager);
                     _updateables.Add(Controller.StorageManager);
                     if (Controller.PathManager != null)
                         _updateables.Add(Controller.PathManager);
+                    if (Controller.PodSelectionManager != null) // has to be after path manager
+                        _updateables.Add(Controller.PodSelectionManager);
                     _updateables.Add(SharedControlElements);
                     _updateables.Add(ItemManager);
                     _updateables.Add(Observer);

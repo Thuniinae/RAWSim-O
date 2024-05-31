@@ -70,7 +70,8 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         /// <param name="endWaypoint"></param>
         /// <param name="carryingPod"></param>
         /// <returns>false, if no path can be found.</returns>
-        override public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        override public bool findPath(out double endTime, double currentTime,
+            Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             Agent agent;
             getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
@@ -86,6 +87,37 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 // TODO: add penalty for possible collision
             }
             return success;
+        }
+
+        /// <summary>
+        /// Find path based on schedule table, will add path to schedule table if success.
+        /// </summary>
+        /// <returns>false, if can't find path</returns>
+        override public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        {
+            Agent agent;
+            getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
+            var method = PathFinder as WHCAnStarMethod;
+            var success = method.schedulePath(out endTime, currentTime, agent);
+            if (success){
+                // estimated travel time of path outside of WHCA* window
+                var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
+                if(carryingPod)
+                    endTime += Distances.CalculateShortestTimePathPodSafe(waypoint, endWaypoint, Instance);
+                else
+                    endTime += Distances.CalculateShortestTimePath(waypoint, endWaypoint, Instance);
+                // TODO: add penalty for possible collision
+            }
+            return success;
+        }
+        /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        override public void scheduleInit()
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            method.scheduleInit();
         }
     }
 }

@@ -60,6 +60,31 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
                 _touchedNodes = new HashSet<int>();
         }
 
+        public ReservationTable(Graph graph, DisjointIntervalTree[] intervalTree, 
+            HashSet<int> touchedNodes, bool storeAgentIds, bool storePrios)
+        {
+            _graph = graph;
+            _intervallTrees = intervalTree;
+            _touchedNodes = touchedNodes;
+            _storeAgentIds = storeAgentIds;
+            _storePrios = storePrios;
+        }
+
+        /// <summary>
+        /// Return a deep copied ReservationTable.
+        /// </summary>
+        /// <returns></returns>
+        public ReservationTable DeepCopy()
+        {
+            var trees = new DisjointIntervalTree[_graph.NodeCount];
+            for(var node = 0; node < _graph.NodeCount; node++)
+            {
+                if(_intervallTrees[node] != null) 
+                    trees[node] = _intervallTrees[node].DeepCopy();
+            }
+            return new ReservationTable(_graph, trees, new HashSet<int>(_touchedNodes), _storeAgentIds, _storePrios);
+        }
+
         /// <summary>
         /// Clears this instance.
         /// </summary>
@@ -110,6 +135,19 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
 
             _intervallTrees[node].Add(Start, End, agentId, prio);
         }
+        /// <summary>
+        /// Get the reservation interval on a node
+        /// </summary>
+        /// <returns></returns>
+        public Interval Get(int node, double start, double end)
+        {
+            if (_intervallTrees[node] == null) return null;
+            else 
+            {
+                _intervallTrees[node].GetOverlappingInterval(start, end, out double intersectionStart, out double intersectionEnd);
+                return new Interval(node, intersectionStart, intersectionEnd);
+            }
+        }
 
         /// <summary>
         /// Adds the specified interval.
@@ -152,6 +190,37 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
             for (int i = 0; i < intervals.Count; i++)
                 this.Remove(intervals[i]);
         }
+        /// <summary>
+        /// Removes the specified intervals. Split intervals larger than accuracy
+        /// </summary>
+        /// <param name="intervals">The intervals.</param>
+        public void CarefulRemoves(List<Interval> intervals)
+        {
+            for (int i = 0; i < intervals.Count; i++)
+            {
+                CarefulRemove(intervals[i]);
+            }
+        }
+
+        public void CarefulRemove(Interval interval)
+        {
+            if(_intervallTrees[interval.Node].Count == 0) return;
+            // find the index of first interval end > start
+            if(!_intervallTrees[interval.Node].IntersectionFree(interval.Start, out int indexStart))
+                indexStart--;
+            // find the index of last interval start < end
+            if(!_intervallTrees[interval.Node].IntersectionFree(interval.End, out int indexEnd))
+                indexEnd--;
+            if(indexStart < 0) indexStart = 0;
+            if(indexEnd >= _intervallTrees[interval.Node].Count) indexEnd = _intervallTrees[interval.Node].Count - 1;
+            // remove all index between
+            for(var i = indexEnd; i >= indexStart ; i--) // need to remove from back
+            {
+                _intervallTrees[interval.Node].Remove(i);
+            }
+
+        }
+
 
         /// <summary>
         /// Removes the interval intersects with point in time.

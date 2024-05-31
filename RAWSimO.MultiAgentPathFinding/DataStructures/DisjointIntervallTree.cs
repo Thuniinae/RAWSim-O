@@ -45,6 +45,23 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
             _intervalPrio = storePrios ? new List<int>() : null;
         }
 
+        public DisjointIntervalTree(List<double> intervalStart, List<double> intervalEnds, List<int> intervalAgentId, List<int> intervalPrio)
+        {
+            _intervalStart = new(intervalStart);
+            _intervalEnds = new(intervalEnds);
+            if (intervalAgentId != null) _intervalAgentId = new(intervalAgentId);
+            if (intervalPrio != null) _intervalPrio = new(intervalPrio);
+        }
+
+        /// <summary>
+        /// Return a new DisjointIntervalTree with same contents
+        /// </summary>
+        /// <returns></returns>
+        public DisjointIntervalTree DeepCopy()
+        {
+            return new DisjointIntervalTree(_intervalStart, _intervalEnds, _intervalAgentId, _intervalPrio);
+        }
+
         /// <summary>
         /// Adds an interval.
         /// </summary>
@@ -117,6 +134,17 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
 
             return true;
         }
+
+        /// <summary>
+        /// Find index s.t. _intervalStart[index - 1]  &lt; time &lt;= _intervalStart[index]
+        /// </summary>
+        /// <returns>false, if the time is in any interval.</returns>
+        public  bool IntersectionFree(double time, out int index)
+        {
+            // the return index is _intervalStart[index - 1] < time <= _intervalStart[index]
+            return _intersectionFree(time, time, out index);
+        }
+
 
         /// <summary>
         /// Checks weather the given interval intersects with an existing interval.

@@ -118,6 +118,9 @@ namespace RAWSimO.Core.Control.Defaults.OrderBatching
         /// This method is being timed for statistical purposes and is also ONLY called when <code>SituationInvestigated</code> is <code>false</code>.
         /// Hence, set the field accordingly to react on events not tracked by this outer skeleton.
         /// </summary>
+        /// <param name="station"></param>
+        /// <param name="undecidedOrders">List of orders to be allocated. Will remove allocated orders in this list.</param>
+        /// <exception cref="Exception"></exception>
         public void FullySupplied(OutputStation station, HashSet<Order> undecidedOrders)
         {
             // If not initialized, do it now

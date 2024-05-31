@@ -825,6 +825,10 @@ namespace RAWSimO.Core.Configurations
     public class SimulatedAnnealingPodSelectionConfiguration : PodSelectionConfiguration
     {
         /// <summary>
+        /// Replace simulated annealing with greedy method to selection pod for each station individually
+        /// </summary>
+        public bool GreedyMethod = false;
+        /// <summary>
         /// The time period in second between running Simulated Annealing.
         /// </summary>
         public double updatePeriod = 1.0;
@@ -844,6 +848,14 @@ namespace RAWSimO.Core.Configurations
         /// Number of pods that consider it's arrival time to the station
         /// </summary>
         public int searchPodNum = 50;
+        /// <summary>
+        /// Maximum iteration of the algorithm.
+        /// </summary>
+        public int maxIteration = 100;
+        /// <summary>
+        /// End the algorithm when all stations considered in the algorithm have item throughput rate difference smaller than this value.
+        /// </summary>
+        public double minDifference = 10;
         /// <summary>
         /// Indicates whether more suitable extract requests are included in an ongoing extract task on-the-fly.
         /// </summary>

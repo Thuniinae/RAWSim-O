@@ -79,9 +79,23 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
         /// </summary>
         private Dictionary<Bot, Circle> _botStations = new Dictionary<Bot, Circle>();
         /// <summary>
+        /// The stations the bots are assigned to.
+        /// </summary>
+        public override Dictionary<Bot, Circle> botStations
+        {
+            get { return _botStations; }
+        }
+        /// <summary>
         /// The bots per station.
         /// </summary>
         private Dictionary<Circle, HashSet<Bot>> _stationBots = new Dictionary<Circle, HashSet<Bot>>();
+        /// <summary>
+        /// The bots per station.
+        /// </summary>
+        public override Dictionary<Circle, HashSet<Bot>> stationBots
+        {
+            get { return _stationBots;}
+        }
         /// <summary>
         /// The number of bots working for the respective station at the current moment (including bots not assigned but extending to that station).
         /// </summary>
