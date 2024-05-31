@@ -1,4 +1,4 @@
-﻿// If defined, activates assertion of tractable requests to the path planners
+// If defined, activates assertion of tractable requests to the path planners
 //#define DEBUGINTRACTABLEREQUESTS
 
 using RAWSimO.Core.Bots;
@@ -470,7 +470,8 @@ namespace RAWSimO.Core.Control
         /// Estimate ending time of a bot, using reservation table.
         /// </summary>
         /// <returns>Ending time of the path found, equals to double.MaxValue if path not found.</returns>
-        virtual public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        virtual public bool findPath(out double endTime, double currentTime,
+            Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             throw new Exception($"{this.GetType()} do not support findPath function!");
         }

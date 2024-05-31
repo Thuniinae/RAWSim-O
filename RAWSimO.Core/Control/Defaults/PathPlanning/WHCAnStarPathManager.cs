@@ -1,4 +1,4 @@
-﻿using RAWSimO.Core.Bots;
+using RAWSimO.Core.Bots;
 using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Helper;
@@ -70,7 +70,8 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         /// <param name="endWaypoint"></param>
         /// <param name="carryingPod"></param>
         /// <returns>false, if no path can be found.</returns>
-        override public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        override public bool findPath(out double endTime, double currentTime,
+            Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             Agent agent;
             getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
