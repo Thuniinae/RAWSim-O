@@ -1,4 +1,4 @@
-﻿using RAWSimO.Core.Configurations;
+using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.IO;
 using RAWSimO.Core.Items;
@@ -1556,7 +1556,7 @@ namespace RAWSimO.Core.Control
             else
             {
                 var PodSelectionManager = Instance.Controller.PodSelectionManager as SimulatedAnnealingPodSelectionManager;
-                var success = PodSelectionManager.GreedyMethod(out Pod selectedPod, out List<ExtractRequest> extractRequests, bot, oStation);
+                var success = PodSelectionManager.GetResult(out Pod selectedPod, out List<ExtractRequest> extractRequests, bot, oStation);
                 if (success)
                 {
                     EnqueueExtract(

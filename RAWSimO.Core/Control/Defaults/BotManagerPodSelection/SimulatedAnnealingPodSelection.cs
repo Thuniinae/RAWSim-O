@@ -113,6 +113,35 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             // 3. pod priority
             // 4. path planning result (will be difficult)
         }
+        /// Get pod selection and extract requests from the pod selection manager
+        /// </summary>
+        /// <param name="selectedPod"></param>
+        /// <param name="extractRequests"></param>
+        /// <param name="bot"></param>
+        /// <param name="oStation"></param>
+        /// <returns></returns>
+        public bool GetResult(out Pod selectedPod, out List<ExtractRequest> extractRequests, Bot bot, OutputStation oStation)
+        {
+            selectedPod = null;
+            extractRequests = null;
+            if (_config.GreedyMethod)
+                return GreedyMethod(out selectedPod, out extractRequests, bot, oStation);
+            else
+            {
+                if(pendingPods[oStation].Count == 0) return false;
+                // output the selected pod and extract requests
+                selectedPod = pendingPods[oStation].First();
+                pendingPods[oStation].Remove(selectedPod);
+                // release pod for later extract request
+                Instance.ResourceManager.ReleasePod(selectedPod);
+                extractRequests = pendingExtracts[selectedPod];
+                // remove pending extracts
+                pendingExtracts.Remove(selectedPod);
+                orderManager.SignalPodAssigned();
+                return true;
+            }
+        }
+
         /// <summary>
         /// A greedy method of maximizing item throughput rate by considering 
         /// number of items in fully-fulfillable orders and path congestion
@@ -122,9 +151,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             // check order manager
             if (Instance.Controller.OrderManager.GetType() != typeof(FullySuppliedOrderManager))
                 throw new ArgumentException("Unknown order manager type for Simulated Annealing Pod Selection: " + Instance.Controller.OrderManager.GetType().ToString());
-            var orderManager = Instance.Controller.OrderManager as FullySuppliedOrderManager;
-            var pathManager = Instance.Controller.PathManager;
-
+            init();
             foreach(var undecidedOrders in new List<HashSet<Order>>{orderManager.pendingLateOrders, orderManager.pendingNotLateOrders} )
             {
                 // search not late orders if no late order can be fulfilled
