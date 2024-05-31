@@ -1,4 +1,4 @@
-﻿using RAWSimO.Core.Bots;
+using RAWSimO.Core.Bots;
 using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Interfaces;
@@ -37,6 +37,20 @@ namespace RAWSimO.Core.Control
         /// The last task that was assigned to the bot.
         /// </summary>
         private Dictionary<Bot, BotTask> _lastTaskEnqueued = new Dictionary<Bot, BotTask>();
+        /// <summary>
+        /// The stations the bots are assigned to.
+        /// </summary>
+        public virtual Dictionary<Bot, Circle> botStations
+        {
+            get {throw new Exception($"BotManager: {this.GetType()} do not support accessing botStations.");}
+        }
+        /// <summary>
+        /// The bots per station.
+        /// </summary>
+        public virtual Dictionary<Circle, HashSet<Bot>> stationBots
+        {
+            get {throw new Exception($"BotManager: {this.GetType()} do not support accessing stationBots.");}
+        }
         /// <summary>
         /// Creates a new task allocation manager instance.
         /// </summary>
