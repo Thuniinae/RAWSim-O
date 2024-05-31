@@ -2119,6 +2119,16 @@ namespace RAWSimO.Core.Control
                     _statIStationForPodScorerValues.Select(e => e / _statIStationForPodAssignments).Select(e => e.ToString(IOConstants.FORMATTER))));
             Instance.StatCustomControllerInfo.CustomLogPCString = string.Join(IOConstants.DELIMITER_CUSTOM_CONTROLLER_FOOTPRINT.ToString(), scoreInfos);
         }
+        /// <summary>
+        /// Record the score of a pod when it is selected. Should be called after enqueue an extract task for a bot.
+        /// </summary>
+        public void logPodAssignment(double score = 1.0)
+        {
+            _statPodForOStationAssignments++;
+            Instance.StatCustomControllerInfo.CustomLogPC1 = score / _statPodForOStationAssignments; // no actual score
+            Instance.StatCustomControllerInfo.CustomLogPC2 = 0;
+            Instance.StatCustomControllerInfo.CustomLogPC3 = 0;
+        }
 
         #endregion
     }
