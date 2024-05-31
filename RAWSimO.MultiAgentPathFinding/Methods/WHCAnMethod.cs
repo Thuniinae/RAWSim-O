@@ -330,9 +330,6 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 if(!_scheduledPath.ContainsKey(agent.ID))
                 {
                     _scheduledPath[agent.ID] = new List<ReservationTable.Interval>(_calculatedReservations[agent.ID]);
-                    // remove the reservation of last node from last time to infinity of previous path
-                    if(_calculatedReservations[agent.ID].Count > 0)
-                        _scheduledPath[agent.ID].RemoveAt(_calculatedReservations[agent.ID].Count - 1);
                 }
                 // ignore the bot's path for now
                 if(overwrite) _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
