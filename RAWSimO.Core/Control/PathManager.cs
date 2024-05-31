@@ -1,4 +1,4 @@
-// If defined, activates assertion of tractable requests to the path planners
+﻿// If defined, activates assertion of tractable requests to the path planners
 //#define DEBUGINTRACTABLEREQUESTS
 
 using RAWSimO.Core.Bots;
@@ -475,7 +475,24 @@ namespace RAWSimO.Core.Control
         {
             throw new Exception($"{this.GetType()} do not support findPath function!");
         }
+        
+        /// <summary>
+        /// Find path based on schedule table, will add path to schedule table if success.
+        /// </summary>
+        /// <returns>false, if can't find path</returns>
+        virtual public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        {
+            throw new Exception($"{this.GetType()} do not support schedulePath function!");
+        }
 
+        /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        virtual public void scheduleInit()
+        {
+            throw new Exception($"{this.GetType()} do not support schedulePath function!");
+        }
         #region IUpdateable Members
 
         /// <summary>
