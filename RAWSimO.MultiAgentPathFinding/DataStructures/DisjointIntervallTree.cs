@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -134,6 +134,17 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
 
             return true;
         }
+
+        /// <summary>
+        /// Find index s.t. _intervalStart[index - 1]  &lt; time &lt;= _intervalStart[index]
+        /// </summary>
+        /// <returns>false, if the time is in any interval.</returns>
+        public  bool IntersectionFree(double time, out int index)
+        {
+            // the return index is _intervalStart[index - 1] < time <= _intervalStart[index]
+            return _intersectionFree(time, time, out index);
+        }
+
 
         /// <summary>
         /// Checks weather the given interval intersects with an existing interval.
