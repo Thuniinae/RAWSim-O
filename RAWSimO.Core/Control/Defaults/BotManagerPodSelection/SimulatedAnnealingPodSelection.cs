@@ -741,9 +741,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                                 if(!pathManager.findPath(out endTime, endTime, bot, pod.Waypoint, oStation.Waypoint, true))
                                     return 0; // can't find path
                                 // estimated station item throughput rate, consider item picking time of pods in queue, but ignore other pods not in queue yet
-                                return scores[pod].Item2 / (Math.Max(endTime-Instance.Controller.CurrentTime, 
-                                                                        oStation.InboundPods.Where(p => p.Bot != null && p.Bot.IsQueueing)
-                                                                                            .Sum(p => p.CountRegisterItems()) * Instance.LayoutConfig.ItemPickTime) 
+                                return scores[pod].Item2 / (Math.Max(endTime-Instance.Controller.CurrentTime, oStation.GetCurrentQueueTime()) 
                                                             + scores[pod].Item2 * Instance.LayoutConfig.ItemPickTime); 
                             }).ThenByDescending(pod => scores[pod].Item2).First(); // break tie by score
                     var possibleOrders = scores[bestPod].Item1;
