@@ -3,6 +3,7 @@ using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Helper;
 using RAWSimO.Core.Interfaces;
+using RAWSimO.Core.Metrics;
 using RAWSimO.Core.Waypoints;
 using RAWSimO.MultiAgentPathFinding;
 using RAWSimO.MultiAgentPathFinding.Elements;
@@ -58,6 +59,33 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 method.RuntimeLimitPerAgent = config.Clocking / instance.Bots.Count;
                 method.RunTimeLimitOverall = config.Clocking;
             }
+        }
+        /// <summary>
+        /// Estimate ending time of a bot, using WHCA* reservation table.
+        /// </summary>
+        /// <param name="endTime">CurrentTime + Time cost in window(may be different when planed) + Time cost outside the window (estimated)</param>
+        /// <param name="bot"></param>
+        /// <param name="currentTime"></param>
+        /// <param name="startWaypoint"></param>
+        /// <param name="endWaypoint"></param>
+        /// <param name="carryingPod"></param>
+        /// <returns>false, if no path can be found.</returns>
+        override public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        {
+            Agent agent;
+            getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
+            var method = PathFinder as WHCAnStarMethod;
+            var success = method.findPath(out endTime, currentTime, agent);
+            if (success){
+                // estimated travel time of path outside of WHCA* window
+                var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
+                if(carryingPod)
+                    endTime += Distances.CalculateShortestTimePathPodSafe(waypoint, endWaypoint, Instance);
+                else
+                    endTime += Distances.CalculateShortestTimePath(waypoint, endWaypoint, Instance);
+                // TODO: add penalty for possible collision
+            }
+            return success;
         }
     }
 }

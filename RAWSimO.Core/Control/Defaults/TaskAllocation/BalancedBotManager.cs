@@ -115,7 +115,7 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
         {
             // Check active stations
             List<InputStation> activeInputStations = Instance.InputStations.Where(s => overrideActivity || s.ItemBundles.Any()).ToList();
-            List<OutputStation> activeOutputStations = Instance.OutputStations.Where(s => overrideActivity || s.AssignedOrders.Any()).ToList();
+            List<OutputStation> activeOutputStations = Instance.OutputStations.Where(s => overrideActivity || _config.overrideOutputStationActivity|| s.AssignedOrders.Any()).ToList();
             // Check whether something changed since last time
             IEnumerable<Circle> currentlyActiveStations = activeInputStations.Cast<Circle>().Concat(activeOutputStations);
             if (_lastActiveStations == null)
@@ -262,7 +262,6 @@ namespace RAWSimO.Core.Control.Defaults.TaskAllocation
         /// <param name="bot">The bot to get a task for.</param>
         protected override void GetNextTask(Bot bot)
         {
-            Instance.LogVerbose("get next task");
             // Search all stations only if no resting or repositioning is intended for the robot
             if (// Ensure robot is not set for resting
                 _botStations.ContainsKey(bot) && _botStations[bot] != null &&

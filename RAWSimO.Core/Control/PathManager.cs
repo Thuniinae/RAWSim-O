@@ -434,7 +434,7 @@ namespace RAWSimO.Core.Control
                 OrientationAtNextNode = bot.GetTargetOrientation(),
                 DestinationNode = _waypointIds[destination],
                 FinalDestinationNode = _waypointIds[finalDestination],
-                Path = bot.Path, //path reference => will be filled
+                Path = new Path(), //path reference => will be filled
                 FixedPosition = bot.hasFixedPosition(),
                 Resting = bot.IsResting(),
                 CanGoThroughObstacles = Instance.ControllerConfig.PathPlanningConfig.CanTunnel && !carryingPod,
@@ -466,6 +466,14 @@ namespace RAWSimO.Core.Control
             return _waypointIds[waypoint];
         }
         #endregion
+        /// <summary>
+        /// Estimate ending time of a bot, using reservation table.
+        /// </summary>
+        /// <returns>Ending time of the path found, equals to double.MaxValue if path not found.</returns>
+        virtual public bool findPath(out double endTime, Bot bot, double currentTime, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        {
+            throw new Exception($"{this.GetType()} do not support findPath function!");
+        }
 
         #region IUpdateable Members
 

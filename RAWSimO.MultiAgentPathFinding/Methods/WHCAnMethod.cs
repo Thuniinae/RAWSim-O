@@ -257,5 +257,42 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             }
 
         }
+        /// <summary>
+        /// Find single path to the goal within the window and ending time of a bot, using current reservation table.
+        /// </summary>
+        /// <param name="endTime">Ending time of the bot reach the goal or reach the end of the window.</param>
+        /// <param name="currentTime">The time when the path finding start from.</param>
+        /// <param name="agent">Agent.Path is the path within window.</param>
+        /// <returns>false, if no path can be found.</returns>
+        public bool findPath(out double endTime, double currentTime, Agent agent)
+        {
+            if (agent != null) 
+            {
+                if (!UseBias)
+                {
+                    //Create RRA* search if necessary.
+                    //Necessary if the agent has none or the agents destination has changed
+                    ReverseResumableAStar rraStar;
+                    if (!rraStars.TryGetValue(agent.ID, out rraStar) || rraStar == null || rraStar.StartNode != agent.DestinationNode ||
+                        UseDeadlockHandler && _deadlockHandler.IsInDeadlock(agent, currentTime)) // TODO this last expression is used to set back the state of the RRA* in case of a deadlock - this is only a hotfix
+                        rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
+                }
+
+                //search my path to the goal (within time window)
+                var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, currentTime + LengthOfAWindow, _reservationTable, agent, rraStars[agent.ID]);
+                aStar.FinalReservation = true;
+                //execute
+                var found = aStar.Search();
+                if(found) 
+                {
+                    List<ReservationTable.Interval> reservations;
+                    aStar.GetPathAndReservations(ref agent.Path, out reservations);
+                    endTime = reservations.Last().End;
+                    return true;
+                }
+            }
+            endTime = double.MaxValue;
+            return false;
+        }
     }
 }

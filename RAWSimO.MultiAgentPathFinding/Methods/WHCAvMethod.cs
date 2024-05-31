@@ -204,8 +204,14 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
 
             return conflictFree;
         }
-
-        public bool findPath(out double timeCost, double currentTime, Agent agent)
+        /// <summary>
+        /// Find single path to the goal within the window and ending time of a bot, using current reservation table.
+        /// </summary>
+        /// <param name="endTime">Ending time of the bot reach the goal or reach the end of the window.</param>
+        /// <param name="currentTime">The time when the path finding start from.</param>
+        /// <param name="agent">Agent.Path is the path within window.</param>
+        /// <returns>false, if no path can be found.</returns>
+        public bool findPath(out double endTime, double currentTime, Agent agent)
         {
             if (agent != null) 
             {
@@ -218,19 +224,19 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                     rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
                 }
 
-                //search my path to the goal
+                //search my path to the goal (within time window)
                 var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, currentTime + LengthOfAWindow, _reservationTable, agent, rraStars[agent.ID]);
                 var found = aStar.Search();
                 if(found) 
                 {
                     List<ReservationTable.Interval> reservations;
                     aStar.GetPathAndReservations(ref agent.Path, out reservations);
-                    timeCost = reservations.Last().End;
+                    endTime = reservations.Last().End;
                     return true;
                 }
             }
             // failed to find path
-            timeCost = double.MaxValue;
+            endTime = double.MaxValue;
             return false;
         }
 

@@ -1,4 +1,5 @@
-﻿using RAWSimO.Core.Metrics;
+﻿using RAWSimO.Core.Elements;
+using RAWSimO.Core.Metrics;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -660,6 +661,13 @@ namespace RAWSimO.Core.Configurations
             }
             return name;
         }
+    
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.Default;}
+        
     }
 
     /// <summary>
@@ -716,6 +724,180 @@ namespace RAWSimO.Core.Configurations
         {
             return "FullyDemandPodSelection";
         }
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.FullyDemand;}
+
+    }
+    /// <summary>
+    /// Exposes parameters for the default selection of pods. 
+    /// </summary>
+    public class HADODPodSelectionConfiguration : PodSelectionConfiguration
+    {
+        /// <summary>
+        /// Indicates whether more suitable extract requests are included in an ongoing extract task on-the-fly.
+        /// </summary>
+        public bool OnTheFlyExtract = true;
+        /// <summary>
+        /// Indicates whether more suitable insert requests are included in an ongoing store task on-the-fly.
+        /// </summary>
+        public bool OnTheFlyStore = true;
+        /// <summary>
+        /// Indicates the mode for filtering suitable pods for picking.
+        /// </summary>
+        public PodSelectionExtractRequestFilteringMode FilterForConsideration = PodSelectionExtractRequestFilteringMode.AssignedAndCompleteQueued;
+        /// <summary>
+        /// Indicates the mode for filtering the requests when deciding the actual reservations for a pod.
+        /// </summary>
+        public PodSelectionExtractRequestFilteringMode FilterForReservation = PodSelectionExtractRequestFilteringMode.AssignedAndCompleteQueued;
+
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (main rule).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorer = new PCScorerIStationForBotWithPodWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (first tie breaker).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorerTieBreaker1 = new PCScorerIStationForBotWithPodNearest();
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (second tie breaker).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorerTieBreaker2 = new PCScorerIStationForBotWithPodRandom();
+        /// <summary>
+        /// Rule settings for selecting an output station for a bot carrying a pod (main rule).
+        /// </summary>
+        public PCScorerOStationForBotWithPod OutputExtendedSearchScorer = new PCScorerOStationForBotWithPodWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting an output station for a bot carrying a pod (first tie breaker).
+        /// </summary>
+        public PCScorerOStationForBotWithPod OutputExtendedSearchScorerTieBreaker1 = new PCScorerOStationForBotWithPodNearest();
+        /// <summary>
+        /// Rule settings for selecting an output station for a bot carrying a pod (second tie breaker1).
+        /// </summary>
+        public PCScorerOStationForBotWithPod OutputExtendedSearchScorerTieBreaker2 = new PCScorerOStationForBotWithPodRandom();
+
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (main rule).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorer = new PCScorerPodForIStationBotWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (first tie breaker).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorerTieBreaker1 = new PCScorerPodForIStationBotNearest();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (second tie breaker).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorerTieBreaker2 = new PCScorerPodForIStationBotRandom();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an output station (main rule).
+        /// </summary>
+        public PCScorerPodForOStationBot OutputPodScorer = new PCScorerPodForOStationBotCompleteable();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an output station (first tie breaker).
+        /// </summary>
+        public PCScorerPodForOStationBot OutputPodScorerTieBreaker1 = new PCScorerPodForOStationBotWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an output station (second tie breaker).
+        /// </summary>
+        public PCScorerPodForOStationBot OutputPodScorerTieBreaker2 = new PCScorerPodForOStationBotNearest();
+
+
+        /// <summary>
+        /// Returns a name identifying the method.
+        /// </summary>
+        /// <returns>The name of the method.</returns>
+        public override string GetMethodName()
+        {
+            return "HADODPodSelection";
+        }
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.HADOD;}
+    }
+
+    /// <summary>
+    /// Exposes parameters for the Simulated-Annealing(SA) Pod selection of pods. Output Extend search not implement.
+    /// </summary>
+    public class SimulatedAnnealingPodSelectionConfiguration : PodSelectionConfiguration
+    {
+        /// <summary>
+        /// The time period in second between running Simulated Annealing.
+        /// </summary>
+        public double updatePeriod = 1.0;
+        /// <summary>
+        /// Initial temperature of Simulated Annealing Algorithm
+        /// </summary>
+        public int initTemp = 100;
+        /// <summary>
+        /// Cooling rate of the temperature: t' = t * coolingRate
+        /// </summary>
+        public double coolingRate = 0.9;
+        /// <summary>
+        /// Minimal temperature of the system, stop algorithm when temperature is lower than this.
+        /// </summary>
+        public double minTemp = 0.5;
+        /// <summary>
+        /// Number of pods that consider it's arrival time to the station
+        /// </summary>
+        public int searchPodNum = 50;
+        /// <summary>
+        /// Indicates whether more suitable extract requests are included in an ongoing extract task on-the-fly.
+        /// </summary>
+        public bool OnTheFlyExtract = false;
+        /// <summary>
+        /// Indicates whether more suitable insert requests are included in an ongoing store task on-the-fly.
+        /// </summary>
+        public bool OnTheFlyStore = false;
+        /// <summary>
+        /// Indicates the mode for filtering suitable pods for picking stations (default: AssignedOnly).
+        /// </summary>
+        public PodSelectionExtractRequestFilteringMode FilterForConsideration = PodSelectionExtractRequestFilteringMode.AssignedOnly;
+        /// <summary>
+        /// Indicates the mode for filtering the requests when deciding the actual reservations for a pod.
+        /// </summary>
+        public PodSelectionExtractRequestFilteringMode FilterForReservation = PodSelectionExtractRequestFilteringMode.AssignedAndCompleteQueued;
+
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (main rule).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorer = new PCScorerIStationForBotWithPodWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (first tie breaker).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorerTieBreaker1 = new PCScorerIStationForBotWithPodNearest();
+        /// <summary>
+        /// Rule settings for selecting an input station for a bot carrying a pod (second tie breaker).
+        /// </summary>
+        public PCScorerIStationForBotWithPod InputExtendedSearchScorerTieBreaker2 = new PCScorerIStationForBotWithPodRandom();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (main rule).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorer = new PCScorerPodForIStationBotWorkAmount();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (first tie breaker).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorerTieBreaker1 = new PCScorerPodForIStationBotNearest();
+        /// <summary>
+        /// Rule settings for selecting a pod for a bot working for an input station (second tie breaker).
+        /// </summary>
+        public PCScorerPodForIStationBot InputPodScorerTieBreaker2 = new PCScorerPodForIStationBotRandom();
+        /// <summary>
+        /// Returns a name identifying the method, setting is ignored in name.
+        /// </summary>
+        /// <returns>The name of the method.</returns>
+        public override string GetMethodName()
+        {
+            return "SimulatedAnnealingPodSelection";
+        }
+        /// <summary>
+        /// Returns the type of the corresponding method this configuration belongs to.
+        /// </summary>
+        /// <returns>The type of the method.</returns>
+        public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.SimulatedAnnealing;}
     }
     #endregion
 

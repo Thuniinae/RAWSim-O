@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using RAWSimO.Core.Configurations;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Interfaces;
 using RAWSimO.Core.Items;
@@ -34,7 +35,6 @@ namespace RAWSimO.Core.Control
         #endregion Constructor
 
         #region Fields
-
         /// <summary>
         /// The instance this manager is assigned to.
         /// </summary>
@@ -60,11 +60,35 @@ namespace RAWSimO.Core.Control
         /// indicate total available capacity is less than late orders
         /// </summary>
         public bool lateOrdersEnough;
+        /// <summary>
+        ///已分配给工作站的Pods
+        /// </summary>
+        protected Dictionary<OutputStation, HashSet<Pod>> _inboundPodsPerStation = new Dictionary<OutputStation, HashSet<Pod>>();
+        
 
         /// <summary>
         /// Indicates that the current situation has already been investigated. So that it will be ignored.
         /// </summary>
         protected bool SituationInvestigated { get; set; }
+        /// <summary>
+        /// 工作站的当前可用容量
+        /// </summary>
+        public Dictionary<OutputStation, int> Cs = new Dictionary<OutputStation, int>();
+        /// <summary>
+        /// 产生Cs
+        /// </summary>
+        /// <returns></returns>
+        public void GenerateCs()
+        {
+            foreach (var station in Instance.OutputStations)
+            {
+                if (Cs.ContainsKey(station))
+                    Cs[station] = station.Capacity - station.CapacityReserved - station.CapacityInUse;
+                else
+                    Cs.Add(station, station.Capacity - station.CapacityReserved - station.CapacityInUse);
+            }
+        }
+
 
         #endregion Fields
 
@@ -176,6 +200,7 @@ namespace RAWSimO.Core.Control
             var order = Instance.ItemManager.RetrieveOrder(this);
             while (order != null)
             {
+                order.TimePlaced = Instance.SettingConfig.StartTime.AddSeconds(Convert.ToInt32(Instance.Controller.CurrentTime));
                 // Add the bundle
                 _pendingOrders.Add(order);
                 // Retrieve the next bundle that we have not seen so far

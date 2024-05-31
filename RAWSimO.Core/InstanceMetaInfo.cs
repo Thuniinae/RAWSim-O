@@ -126,6 +126,8 @@ namespace RAWSimO.Core
                     _updateables.Add(Controller.BundleManager);
                     _updateables.Add(Controller.Allocator);
                     _updateables.Add(Controller.BotManager);
+                    if (Controller.PodSelectionManager != null)
+                        _updateables.Add(Controller.PodSelectionManager);
                     _updateables.Add(Controller.StationManager);
                     _updateables.Add(Controller.PodStorageManager);
                     _updateables.Add(Controller.RepositioningManager);
