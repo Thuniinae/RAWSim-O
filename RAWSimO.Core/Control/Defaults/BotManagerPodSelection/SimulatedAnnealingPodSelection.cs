@@ -195,10 +195,10 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                             OrderByDescending(pod => {
                                 // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
                                 double endTime;
-                                if(!pathManager.findPath(out endTime, bot, Instance.Controller.CurrentTime, bot.CurrentWaypoint, pod.Waypoint, false))
+                                if(!pathManager.findPath(out endTime, Instance.Controller.CurrentTime, bot, bot.CurrentWaypoint, pod.Waypoint, false))
                                     return 0; // can't find path
                                 endTime += Instance.LayoutConfig.PodTransferTime;
-                                if(!pathManager.findPath(out endTime, bot, endTime, pod.Waypoint, oStation.Waypoint, true))
+                                if(!pathManager.findPath(out endTime, endTime, bot, pod.Waypoint, oStation.Waypoint, true))
                                     return 0; // can't find path
                                 // estimated station item throughput rate, consider item picking time of pods in queue, but ignore other pods not in queue yet
                                 return scores[pod].Item2 / (Math.Max(endTime-Instance.Controller.CurrentTime, 
