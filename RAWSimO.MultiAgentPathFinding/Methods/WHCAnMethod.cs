@@ -320,10 +320,10 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         /// <summary>
         /// Find path based on schedule table, will add path to schedule table if success.
         /// </summary>
+        /// <param name="overwrite">input true to overwrite previous schedule path of the agent</param>
         /// <returns>false, if can't find path</returns>
-        public bool schedulePath(out double endTime, double startTime, Agent agent)
+        public bool schedulePath(out double endTime, double startTime, Agent agent, bool overwrite)
         {
-            // !!TODO: add append mode to preserve the previous path
             if (agent != null) 
             {
                 // init schedule path of the agent
@@ -335,7 +335,7 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                         _scheduledPath[agent.ID].RemoveAt(_calculatedReservations[agent.ID].Count - 1);
                 }
                 // ignore the bot's path for now
-                _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
+                if(overwrite) _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
                 
                 if (!UseBias)
                 {
@@ -357,12 +357,13 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 {
                     aStar.GetPathAndReservations(ref agent.Path, out List<ReservationTable.Interval> reservations);
                     endTime = reservations.Last().End;
-                    _scheduledPath[agent.ID] = reservations;
-                    _scheduledTable.Add(_scheduledPath[agent.ID]);
+                    if(overwrite) _scheduledPath[agent.ID] = reservations;
+                    else _scheduledPath[agent.ID].AddRange(reservations);
+                    _scheduledTable.Add(reservations);
                     return true;
                 }
                 else // add ignore bot's path back if not found
-                    _scheduledTable.Add(_scheduledPath[agent.ID]);
+                    if(overwrite) _scheduledTable.Add(_scheduledPath[agent.ID]);
             }
             endTime = double.MaxValue;
             return false;

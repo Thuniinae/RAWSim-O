@@ -634,14 +634,14 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             // Helpers
             var s = point.searchSpace;
             // estimate time of: bot -> pod
-            if(!pathManager.schedulePath(out double endTime, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false))
+            if(!pathManager.schedulePath(out double endTime, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false, true))
                 return null; // failed to find path in window
 
             // Add time of lifting pod
             endTime += Instance.LayoutConfig.PodTransferTime; 
             
             // estimate time of: pod->station
-            if(!pathManager.schedulePath(out endTime, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true))
+            if(!pathManager.schedulePath(out endTime, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true, false))
                 return null; // / failed to find path in window
 
             // Estimated Item throughput rate of the station

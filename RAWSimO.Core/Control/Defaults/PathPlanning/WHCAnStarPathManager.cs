@@ -93,12 +93,12 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         /// Find path based on schedule table, will add path to schedule table if success.
         /// </summary>
         /// <returns>false, if can't find path</returns>
-        override public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        override public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod, bool overwrite)
         {
             Agent agent;
             getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
             var method = PathFinder as WHCAnStarMethod;
-            var success = method.schedulePath(out endTime, currentTime, agent);
+            var success = method.schedulePath(out endTime, currentTime, agent, overwrite);
             if (success){
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);

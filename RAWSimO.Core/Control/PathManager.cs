@@ -480,7 +480,7 @@ namespace RAWSimO.Core.Control
         /// Find path based on schedule table, will add path to schedule table if success.
         /// </summary>
         /// <returns>false, if can't find path</returns>
-        virtual public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        virtual public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod, bool overwrite)
         {
             throw new Exception($"{this.GetType()} do not support schedulePath function!");
         }
