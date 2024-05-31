@@ -209,8 +209,10 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
             if(!_intervallTrees[interval.Node].IntersectionFree(interval.Start, out int indexStart))
                 indexStart--;
             // find the index of last interval start < end
-            if(!_intervallTrees[interval.Node].IntersectionFree(interval.End, out int indexEnd))
-                indexEnd--;
+            int indexEnd = _intervallTrees[interval.Node].Count - 1;
+            if(!double.IsPositiveInfinity(interval.End))
+                if(!_intervallTrees[interval.Node].IntersectionFree(interval.End, out indexEnd))
+                    indexEnd--;
             if(indexStart < 0) indexStart = 0;
             if(indexEnd >= _intervallTrees[interval.Node].Count) indexEnd = _intervallTrees[interval.Node].Count - 1;
             // remove all index between
