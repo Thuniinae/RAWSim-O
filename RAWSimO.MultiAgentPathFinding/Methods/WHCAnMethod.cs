@@ -272,6 +272,11 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         {
             if (agent != null) 
             {
+                // store reservation
+                var interval = _reservationTable.Get(agent.NextNode, currentTime, currentTime + LengthOfAWindow);
+                // remove reservation of the starting point, because WHCAn* will reserve the ending waypoint of the existed path of the bot
+                if(interval != null) _reservationTable.Remove(interval);
+                
                 if (!UseBias)
                 {
                     //Create RRA* search if necessary.
@@ -287,6 +292,9 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 aStar.FinalReservation = true;
                 //execute
                 var found = aStar.Search();
+                // Add removed reservation back
+                if(interval != null) _reservationTable.Add(interval);
+
                 if(found) 
                 {
                     List<ReservationTable.Interval> reservations;
