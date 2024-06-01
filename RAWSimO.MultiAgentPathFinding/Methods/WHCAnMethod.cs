@@ -322,7 +322,7 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         /// </summary>
         /// <param name="overwrite">input true to overwrite previous schedule path of the agent</param>
         /// <returns>false, if can't find path</returns>
-        public bool schedulePath(out double endTime, double startTime, Agent agent, bool overwrite)
+        public bool schedulePath(out double endTime, ref List<ReservationTable.Interval> path, double startTime, Agent agent)
         {
             if (agent != null) 
             {
@@ -334,8 +334,6 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                     var interval = _scheduledTable.Get(agent.NextNode, startTime, startTime + LengthOfAWindow);
                     if(interval != null) _scheduledTable.Remove(interval); // since only scheduling, no need to add back
                 }
-                // ignore the bot's path for now
-                if(overwrite) _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
                 
                 if (!UseBias)
                 {
@@ -347,47 +345,44 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                         rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
                 }
 
+                // ignore the bot's path for now
+                _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
+                // consider extra path
+                _scheduledTable.Add(path);
+
                 //search my path to the goal (within time window)
                 var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, startTime + LengthOfAWindow, _scheduledTable, agent, rraStars[agent.ID]);
                 aStar.FinalReservation = true;
                 //execute
                 var found = aStar.Search();
 
+                // remove extra path
+                _scheduledTable.CarefulRemoves(path);
+                // add ignore bot's path back
+                _scheduledTable.Add(_scheduledPath[agent.ID]);
+                
                 if(found) 
                 {
                     aStar.GetPathAndReservations(ref agent.Path, out List<ReservationTable.Interval> reservations);
                     endTime = reservations.Last().End;
-                    if(overwrite) _scheduledPath[agent.ID] = reservations;
-                    else _scheduledPath[agent.ID].AddRange(reservations);
-                    _scheduledTable.Add(reservations);
+                    path.AddRange(reservations);
                     return true;
                 }
-                else // add ignore bot's path back if not found
-                    if(overwrite) _scheduledTable.Add(_scheduledPath[agent.ID]);
             }
             endTime = double.MaxValue;
             return false;
         }
-
-        private void addScheduledPath(Agent agent,  List<ReservationTable.Interval> reservations)
+        /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        public void OverwriteScheduledPath(int ID,  List<ReservationTable.Interval> path)
         {
-            int ii = 0;
-            foreach(var r in reservations)
-            {
-                try
-                {
-                    _scheduledTable.Add(r);
-                }
-                catch(Exception ex)
-                {
-                    System.Console.WriteLine(ex.Message);
-                    throw new Exception($"failed addScheduledPath at {ii}/{reservations.Count}");
-                }
-                ii++;
-            }
-            // store reservations for agent for later removal
-            if(!_scheduledPath.ContainsKey(agent.ID)) _scheduledPath[agent.ID] = reservations;
-            else _scheduledPath[agent.ID].AddRange(reservations);
+            // remove previous scheduled path
+            _scheduledTable.CarefulRemoves(_scheduledPath[ID]);
+            // add new scheduled path
+            _scheduledPath[ID] = path;
+            _scheduledTable.Add(path);
         }
     }
 }

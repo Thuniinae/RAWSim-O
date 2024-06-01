@@ -6,6 +6,7 @@ using RAWSimO.Core.Interfaces;
 using RAWSimO.Core.Metrics;
 using RAWSimO.Core.Waypoints;
 using RAWSimO.MultiAgentPathFinding;
+using RAWSimO.MultiAgentPathFinding.DataStructures;
 using RAWSimO.MultiAgentPathFinding.Elements;
 using RAWSimO.MultiAgentPathFinding.Methods;
 using System;
@@ -93,12 +94,12 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         /// Find path based on schedule table, will add path to schedule table if success.
         /// </summary>
         /// <returns>false, if can't find path</returns>
-        override public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod, bool overwrite)
+        override public bool schedulePath(out double endTime, ref List<ReservationTable.Interval> path, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             Agent agent;
             getBotAgent(out agent, bot, currentTime, startWaypoint, endWaypoint, carryingPod);
             var method = PathFinder as WHCAnStarMethod;
-            var success = method.schedulePath(out endTime, currentTime, agent, overwrite);
+            var success = method.schedulePath(out endTime, ref path, currentTime, agent);
             if (success){
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
@@ -119,5 +120,15 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
             var method = PathFinder as WHCAnStarMethod;
             method.scheduleInit();
         }
+
+        /// <summary>
+        /// Overwrite a bot's scheduled path
+        /// </summary>
+        override public void OverwriteScheduledPath(Bot bot,  List<ReservationTable.Interval> path)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            method.OverwriteScheduledPath(bot.ID, path);
+        }
+
     }
 }
