@@ -90,7 +90,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
         private class SearchSpace
         {
-            public List<Point> points{get; private set;}
+            public List<Point> points{get; set;}
             public OutputStation station {get; private set;}
             public Bot bot {get; private set;}
             public double startTime {get; private set;}
@@ -384,6 +384,8 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                     });
                     // remove points with 0 rate
                     searchSpace[station].points.RemoveAll(pt => pt.rate == 0);
+                    // sort the points
+                    searchSpace[station].points = searchSpace[station].points.OrderByDescending(p => p.rate).ToList();
                     // process search space
                     searchSpace[station].calculateCDF();
                 }
