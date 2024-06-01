@@ -7,6 +7,7 @@ using RAWSimO.Core.Control.Defaults.OrderBatching;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Items;
 using RAWSimO.Core.Management;
+using RAWSimO.MultiAgentPathFinding.DataStructures;
 
 namespace RAWSimO.Core.Control.Defaults.PodSelection
 {
@@ -655,15 +656,16 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
             // Helpers
             var s = point.searchSpace;
+            path = new();
             // estimate time of: bot -> pod
-            if(!pathManager.schedulePath(out double endTime, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false, true))
+            if(!pathManager.schedulePath(out double endTime, ref path, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false))
                 return null; // failed to find path in window
 
             // Add time of lifting pod
             endTime += Instance.LayoutConfig.PodTransferTime; 
             
             // estimate time of: pod->station
-            if(!pathManager.schedulePath(out endTime, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true, false))
+            if(!pathManager.schedulePath(out endTime, ref path, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true))
                 return null; // / failed to find path in window
 
             // Estimated Item throughput rate of the station
