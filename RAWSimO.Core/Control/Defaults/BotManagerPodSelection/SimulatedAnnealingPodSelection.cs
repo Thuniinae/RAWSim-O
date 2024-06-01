@@ -325,20 +325,27 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 // TODO: select bot that is not extract task, accept park, rest, none
                 // TODO: make sure bot does't has extract task in task queue
                 var bots = botManager.stationBots[station]
-                    .Where(bot => (bot.CurrentTask.Type == BotTaskType.None)||(bot.CurrentTask.Type == BotTaskType.Rest))
+                    .Where(bot => (bot.CurrentTask.Type == BotTaskType.None)
+                        ||(bot.CurrentTask.Type == BotTaskType.Rest)
+                        ||(bot.CurrentTask.Type == BotTaskType.ParkPod))
                     .Where(bot => botManager.CountFutureTasks(bot) == 0); 
                 if(bots.Count() == 0) continue;
-                // Estimated bots' next available time
-                var botTime = bots.Select(bot => {
-                        var botN = bot as BotNormal; 
-                        var success = botN.EstimateFinishedTime(out double endTime);
-                        return new Tuple<Bot, double, bool>(bot, endTime, success);
-                        });
-                System.Console.WriteLine($"station {station.ID}: {string.Join(", ", botTime.Select(t => $"{t.Item1}/{t.Item2}/{t.Item3}"))}");
-                var bestBotTime = botTime.Where(t => t.Item3).MinBy(t => t.Item2);
-                if(bestBotTime != null)
+                //　pick rest or None bot first
+                var restBots = bots.Where(b => (b.CurrentTask.Type == BotTaskType.None) || (b.CurrentTask.Type == BotTaskType.Rest));
+                if(restBots.Count() > 0)
+                    searchSpace[station] = new SearchSpace(station, restBots.First(), Instance.Controller.CurrentTime);
+                else // bot with park pod task
                 {
-                    searchSpace[station] = new SearchSpace(station, bestBotTime.Item1, bestBotTime.Item2);
+                    // find ending time of Park pod task from reservation table
+                    var botTime = bots.Select(bot => {
+                            var success = pathManager.FindArrivalTime(out double endTime, bot); // may failed because  the path hasn't be reserved
+                            return new Tuple<Bot, double, bool>(bot, endTime, success);
+                            });
+                    var bestBotTime = botTime.Where(t => t.Item3).MinBy(t => t.Item2);
+                    if(bestBotTime != null)
+                    {
+                        searchSpace[station] = new SearchSpace(station, bestBotTime.Item1, bestBotTime.Item2);
+                    }
                 }
             }
 
