@@ -493,7 +493,16 @@ namespace RAWSimO.Core.Control
         {
             throw new Exception($"{this.GetType()} do not support schedulePath function!");
         }
-        
+
+        /// <summary>
+        /// Find the arrival time of a bot in the reservation table.
+        /// </summary>
+        /// <returns>false, if arrival time can't be found</returns>
+        virtual public bool FindArrivalTime(out double startTime, Bot bot)
+        {
+            throw new Exception($"{this.GetType()} do not support FindArrivalTime function!");
+        }
+
         /// <summary>
         /// Overwrite a bot's scheduled path
         /// </summary>

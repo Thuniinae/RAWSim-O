@@ -130,5 +130,16 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
             method.OverwriteScheduledPath(bot.ID, path);
         }
 
+        /// <summary>
+        /// Find the arrival time of a bot in the reservation table.
+        /// </summary>
+        /// <returns>false, if arrival time can't be found</returns>
+        override public bool FindArrivalTime(out double startTime, Bot bot)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            var node = GetNodeIdByWaypoint(bot.TargetWaypoint);
+            return method.findEndReservation(out startTime, node);
+        }
+
     }
 }

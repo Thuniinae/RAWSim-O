@@ -384,5 +384,24 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             _scheduledPath[ID] = path;
             _scheduledTable.Add(path);
         }
+        /// <summary>
+        /// Find the starting time of the last reservation of a point if the point
+        /// is the ending point of a reserved path.
+        /// </summary>
+        /// <returns>false, if the input point does not have reservation to infinity.</returns>
+        virtual public bool findEndReservation(out double startTime, int node)
+        {
+            var interval  = _reservationTable.GetLast(node);
+            if (interval == null || !double.IsInfinity(interval.End))
+            {
+                startTime = -1;
+                return false;
+            }
+            else
+            { 
+                startTime = interval.Start;
+                return true;
+            }
+        }
     }
 }

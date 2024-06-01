@@ -150,6 +150,21 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
         }
 
         /// <summary>
+        /// Get the last reservation interval on a node
+        /// </summary>
+        /// <returns></returns>
+        public Interval GetLast(int node)
+        {
+            if (_intervallTrees[node] == null) return null;
+            else 
+            {
+                _intervallTrees[node].GetLastInterval(out double start, out double end);
+                if(start < 0 || end < 0) return null;
+                return new Interval(node, start, end);
+            }
+        }
+
+        /// <summary>
         /// Adds the specified interval.
         /// </summary>
         /// <param name="interval">The interval.</param>

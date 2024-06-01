@@ -353,6 +353,20 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
         }
 
         /// <summary>
+        /// Gets the interval of the last intervals of this table and the given interval.
+        /// </summary>
+        public void GetLastInterval(out double start, out double end)
+        {
+            start = -1;
+            end = -1;
+            if (Count > 0)
+            { 
+                start = _intervalStart[Count - 1];
+                end = _intervalEnds[Count - 1];
+            }
+        }
+
+        /// <summary>
         /// Interval intersection occurred.
         /// </summary>
         public class IntervalIntersectionException : Exception
