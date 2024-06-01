@@ -434,6 +434,9 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                         // claim all pending pod to prevent be claimed by replenishment, reposition...
                         // pod will be released right after leaving pending pods and become selected pod
                         Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
+                        // remove pod from other search space
+                        searchSpace.Values.Where(s => s.points.Count > 0).ToList().ForEach(s => {
+                            s.points.RemoveAll(pt => pt.pod == pod);});
                         foreach(var item in requiredAmount.Keys)
                         {
                             int takePod = Math.Min(requiredAmount[item], pod.CountAvailable(item));
