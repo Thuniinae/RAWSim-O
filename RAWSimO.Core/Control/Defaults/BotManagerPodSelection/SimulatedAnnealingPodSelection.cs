@@ -374,7 +374,9 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                         pt.rate = 0;
                         // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
                         // Then calculate station item throughput rate by arrival time
-                        if(!pathManager.findPath(out double endTime, botStartTime, bot, bot.TargetWaypoint, pt.pod.Waypoint, false))
+                        var startWaypoint = bot.TargetWaypoint; // for bot not in rest task (will no be executed unless bot except rest or None is selected)
+                        if(bot.CurrentTask.Type == BotTaskType.Rest) startWaypoint = bot.CurrentWaypoint; // since rest task will be canceled
+                        if(!pathManager.findPath(out double endTime, botStartTime, bot, startWaypoint, pt.pod.Waypoint, false))
                             return; // can't find path, thus throughput rate = 0
                         endTime += Instance.LayoutConfig.PodTransferTime;
                         if(!pathManager.findPath(out endTime, endTime, bot,  pt.pod.Waypoint, station.Waypoint, true))
