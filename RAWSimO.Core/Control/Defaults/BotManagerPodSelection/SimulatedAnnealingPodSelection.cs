@@ -57,7 +57,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         private Dictionary<OutputStation, Solution> solution = new();
 
         /// <summary>
-        /// Store all fulfillable orders in search space of stations
+        /// Store orders that need pod-set to fulfilled
         /// </summary>
         private HashSet<Order> selectedOrders = new();
 
@@ -313,7 +313,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             Instance.LogVerbose($"{selectedStations.Count()} stations are considered in this simulated annealing update.");
             if (selectedStations.Count() == 0) return false;
 
-            selectedOrders.Clear();
             pathManager.scheduleInit();
 
             Instance.LogVerbose($"try to create {selectedStations.Except(searchSpace.Keys).Count()} search space");
@@ -358,8 +357,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                                 station.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
                     {
                         orders.Add(order);
-                        if(!selectedOrders.Contains(order))
-                            selectedOrders.Add(order);
                     }
                     if (orders.Count > 0)
                     {
@@ -403,10 +400,13 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         {
             foreach(var space in searchSpace.Values.Where(s => s.points.Count == 0))
             {
-                foreach(var order in undecidedOrders.Except(selectedOrders)) // order by timestamp
+                // Helpers
+                var station = space.station;
+                var success = false;
+                // init
+                selectedOrders.Clear();
+                foreach(var order in undecidedOrders) // order by timestamp
                 {
-                    // Helpers
-                    var station = space.station;
 
                     // require amount is total amount in order minus station available
                     var requiredAmount = new Dictionary<ItemDescription, int>(
@@ -466,10 +466,25 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                         }
                         if(request.Keys.Count > 0)
                             throw new Exception("Remain requests not deal with!");
-                        // TODO: make reservation in solution, prevent affect by other solution
+                        Instance.LogVerbose($"station {station.ID} select pod-set: {string.Join(", ", pendingPods[station].Select(p => $"pod {p.ID}({string.Join(", ", pendingExtracts[p].Select(r => r.Item.ID))})"))}");
+                        selectedOrders.Add(order); // store order of the pod-set to prevent chosen by SA
+                        // output one of theselected pod and extract requests
+                        var selectedPod = pendingPods[station].First();
+                        pendingPods[station].Remove(selectedPod);
+                        // release pod for later extract request
+                        Instance.ResourceManager.ReleasePod(selectedPod);
+                        var extractRequests = pendingExtracts[selectedPod];
+                        botManager.EnqueueTask(space.bot, new ExtractTask(Instance, space.bot, selectedPod, station, extractRequests));
+                        botManager.logPodAssignment();
+                        // remove pending extracts
+                        pendingExtracts.Remove(selectedPod);
+                        orderManager.SignalPodAssigned();
+                        success = true;
                         break;
                     }
                 }
+                if(!success)
+                    Instance.LogVerbose($"Warning! can't select pod-set for station {station.ID}");
             }
             // remove search space without point
             searchSpace = searchSpace.Where(s => s.Value.points.Count > 0).ToDictionary(d => d.Key, d=> d.Value);
@@ -574,7 +589,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             // Helpers
             var station = point.station;
             var otherSolution = solution.Values.Where(s => s.point.pod != point.pod);
-            var possibleOrders = point.orders.Except(otherSolution.SelectMany(s => s.orders));
+            var possibleOrders = point.orders.Except(otherSolution.SelectMany(s => s.orders)).Except(selectedOrders);
 
             if (possibleOrders.Count() == 0) return null;
 
