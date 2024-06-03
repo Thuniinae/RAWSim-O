@@ -511,6 +511,31 @@ namespace RAWSimO.Core.Control
             throw new Exception($"{this.GetType()} do not support OverwriteScheduledPath function!");
         }
 
+        /// <summary>
+        /// Add reservation to the schedule table
+        /// </summary>
+        virtual public void AddSchedule(List<ReservationTable.Interval> path)
+        {
+            throw new Exception($"{this.GetType()} do not support AddSchedule function!");
+        }
+
+        /// <summary>
+        /// Remove reservation from the schedule table
+        /// </summary>
+        virtual public void RemoveSchedule(List<ReservationTable.Interval> path)
+        {
+            throw new Exception($"{this.GetType()} do not support RemoveSchedule function!");
+        }
+
+        /// <summary>
+        /// Get the schedule path of the bot. 
+        /// </summary>
+        virtual public List<ReservationTable.Interval> GetSchedulePath(Bot bot)
+        {
+            throw new Exception($"{this.GetType()} do not support RemoveSchedule function!");
+        }
+
+
         #region IUpdateable Members
 
         /// <summary>

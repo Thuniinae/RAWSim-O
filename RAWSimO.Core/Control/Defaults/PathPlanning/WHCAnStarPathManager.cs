@@ -141,5 +141,30 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
             return method.findEndReservation(out startTime, node);
         }
 
+        /// <summary>
+        /// Add reservation to the schedule table
+        /// </summary>
+        override public void AddSchedule(List<ReservationTable.Interval> path)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            method.scheduledTable.Add(path);
+        }
+
+        /// <summary>
+        /// Remove reservation from the schedule table
+        /// </summary>
+        override public void RemoveSchedule(List<ReservationTable.Interval> path)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            method.scheduledTable.CarefulRemoves(path);
+        }
+        /// <summary>
+        /// Get the schedule path of the bot. 
+        /// </summary>
+        override public List<ReservationTable.Interval> GetSchedulePath(Bot bot)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            return method.scheduledPath[bot.ID];
+        }
     }
 }

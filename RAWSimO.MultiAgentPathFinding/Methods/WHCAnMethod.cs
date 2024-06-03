@@ -42,9 +42,9 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         /// </summary>
         public ReservationTable _reservationTable;
 
-        public ReservationTable _scheduledTable;
+        public ReservationTable scheduledTable {get; private set;}
 
-        private Dictionary<int, List<ReservationTable.Interval>> _scheduledPath;
+        public Dictionary<int, List<ReservationTable.Interval>> scheduledPath {get; private set;}
 
         /// <summary>
         /// The calculated reservations
@@ -314,8 +314,8 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         public void scheduleInit()
         {
             // copy reservation table
-            _scheduledTable = _reservationTable.DeepCopy();
-            _scheduledPath = new();
+            scheduledTable = _reservationTable.DeepCopy();
+            scheduledPath = new();
         }
         /// <summary>
         /// Find path based on schedule table, will add path to schedule table if success.
@@ -327,12 +327,12 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             if (agent != null) 
             {
                 // init schedule path of the agent
-                if(!_scheduledPath.ContainsKey(agent.ID))
+                if(!scheduledPath.ContainsKey(agent.ID))
                 {
-                    _scheduledPath[agent.ID] = new List<ReservationTable.Interval>(_calculatedReservations[agent.ID]);
+                    scheduledPath[agent.ID] = new List<ReservationTable.Interval>(_calculatedReservations[agent.ID]);
                     // remove reservation of the starting point, because WHCAn* will reserve the ending waypoint of the existed path of the bot
-                    var interval = _scheduledTable.Get(agent.NextNode, startTime, startTime + LengthOfAWindow);
-                    if(interval != null) _scheduledTable.Remove(interval); // since only scheduling, no need to add back
+                    var interval = scheduledTable.Get(agent.NextNode, startTime, startTime + LengthOfAWindow);
+                    if(interval != null) scheduledTable.Remove(interval); // since only scheduling, no need to add back
                 }
                 
                 if (!UseBias)
@@ -346,20 +346,20 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 }
 
                 // ignore the bot's path for now
-                _scheduledTable.CarefulRemoves(_scheduledPath[agent.ID]);
+                scheduledTable.CarefulRemoves(scheduledPath[agent.ID]);
                 // consider extra path
-                _scheduledTable.Add(path);
+                scheduledTable.Add(path);
 
                 //search my path to the goal (within time window)
-                var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, startTime + LengthOfAWindow, _scheduledTable, agent, rraStars[agent.ID]);
+                var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, startTime + LengthOfAWindow, scheduledTable, agent, rraStars[agent.ID]);
                 aStar.FinalReservation = true;
                 //execute
                 var found = aStar.Search();
 
                 // remove extra path
-                _scheduledTable.CarefulRemoves(path);
+                scheduledTable.CarefulRemoves(path);
                 // add ignore bot's path back
-                _scheduledTable.Add(_scheduledPath[agent.ID]);
+                scheduledTable.Add(scheduledPath[agent.ID]);
                 
                 if(found) 
                 {
@@ -379,10 +379,10 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         public void OverwriteScheduledPath(int ID,  List<ReservationTable.Interval> path)
         {
             // remove previous scheduled path
-            _scheduledTable.CarefulRemoves(_scheduledPath[ID]);
+            scheduledTable.CarefulRemoves(scheduledPath[ID]);
             // add new scheduled path
-            _scheduledPath[ID] = path;
-            _scheduledTable.Add(path);
+            scheduledPath[ID] = path;
+            scheduledTable.Add(path);
         }
         /// <summary>
         /// Find the starting time of the last reservation of a point if the point

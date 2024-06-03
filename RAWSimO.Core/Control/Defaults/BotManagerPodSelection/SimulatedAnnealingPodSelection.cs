@@ -77,7 +77,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             /// </summary>
             public double stationRate;
             /// <summary>
-            /// Absolute difference between previous station rate
+            /// Difference between previous station rate (old - new solution). 
             /// </summary>
             public double difference = double.MaxValue;
             /// <summary>
@@ -570,42 +570,23 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
             // get initial solution by selecting one point for each station
             foreach(var pair in searchSpaces.OrderBy(d => d.Value.points.Count)) //
-            {
-                bool success = false;
-                foreach(var point in pair.Value.points)
-                {
-                    success = updateSolutions(ref solutions, point);
-                    if(success) break;
-                }
-                Instance.LogVerbose($"success == {success} station {pair.Key.ID}: pick a point from {pair.Value.points.Count()} with {pair.Value.bot}({pair.Value.bot.CurrentTask.Type})");
-            }
-            Instance.LogVerbose("First greedy solution: ");
-            foreach(var sol in solutions.Values)
-            {
-                Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
-                Instance.LogVerbose($"pod: {string.Join(", ", sol.point.pod.ID)}");
-                Instance.LogVerbose($"bot: {string.Join(", ", sol.point.searchSpace.bot.ID)}");
-                Instance.LogVerbose("---");
-            }
+                initSolutions(ref solutions, pair.Value);
 
-            // do until temperature is too low, or (ignore for now)total item throughput rate converge
+            // do until temperature is too low, or item throughput rate converge
             int i = 0;
             while(temperature > _config.minTemp && i < _config.maxIteration)
             {
                 i++;
                 // generate a new solution by
                 // pick a random station TODO: higher probability of choosing station with more point
-                var station = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
+                var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
                 // pick a point from the station's search space
-                var point = station.Pick(Instance.Randomizer.NextDouble());
-                // skip if pod exist
-                if (solutions.Values.Any(s => s.point.pod == point.pod))
-                    continue;
+                var point = space.Pick(Instance.Randomizer.NextDouble());
 
                 updateSolutions(ref solutions, point);
 
                 // end iteration if all solution has small difference
-                if(solutions.Values.All(s => s.difference < _config.minDifference))
+                if(solutions.Values.All(s => Math.Abs(s.difference) < _config.minDifference))
                     break;
 
                 // decrease temperature
@@ -614,6 +595,28 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             return solutions;
         }
 
+        /// <summary>
+        /// Try every pod in search space to get a solution.
+        /// </summary>
+        private bool initSolutions(ref Dictionary<OutputStation, Solution> solutions, SearchSpace space)
+        {
+            Solution sol = null;
+            foreach(var point in space.points)
+            {
+                // skip exist pod
+                if(solutions.Values.Any(s => s.point.pod == point.pod)) continue;
+                sol = createSolution(solutions, point, out List<ReservationTable.Interval> path);
+                if(sol != null)
+                {
+                    // store the solution
+                    sol.difference =double.MaxValue;
+                    solutions.Add(point.station, sol);
+                    pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                    return true;
+                }
+            }
+            return false;
+        }
 
         /// <summary>
         /// Update the solutions with the point, if its item throughput rate is acceptable
@@ -621,39 +624,134 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         /// <returns>success</returns>
         private bool updateSolutions(ref Dictionary<OutputStation, Solution> solutions, SearchSpace.Point point)
         {
-            // only add point when pod doesn't exist in solution or there are no solution
-            if (solutions.Values.Count > 0 && solutions.Values.Any(so => so.point.pod == point.pod)) return false;
+            // check if pod already exist in other solutions
+            foreach(var (station, solution) in solutions.Select(d => (d.Key, d.Value)))
+            {
+                if(point.station == station)// ignore same station
+                {
+                    if(point.pod == solution.point.pod) return replanSolution(ref solutions, station);
+                    else continue;
+                }
+                if(point.pod == solution.point.pod) // swap point
+                {
+                    return swapSolution(ref solutions, station, point.searchSpace.station);
+                }
+            }
+
             Solution sol = createSolution(solutions, point, out List<ReservationTable.Interval> path);
             if (sol == null) return false;
 
-            // accept if there are no solution for the station
-            if (!solutions.ContainsKey(point.station))
+            // may find solution not in init solution
+            if(!solutions.ContainsKey(point.station))
             {
-                sol.difference =double.MaxValue;
-                solutions.Add(point.station, sol);
+                sol.difference = double.MaxValue;
+                solutions[point.station] = sol;
                 pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
-                Instance.LogVerbose($"Initial solution selected for station {point.station.ID}: ");
-                Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
-                Instance.LogVerbose($"pod: {sol.point.pod.ID}");
-                Instance.LogVerbose($"bot: {sol.point.searchSpace.bot.ID}");
                 return true;
             }
-            else // Change the solution of the station when rate is higher or acceptable according to the temperature
+
+            sol.difference = solutions[point.station].stationRate - sol.stationRate;
+            double rand = Instance.Randomizer.NextDouble();
+            Instance.LogVerbose($"try station {point.station.ID}: difference: {sol.difference} ");
+            if (sol.difference < 0 || Math.Exp(-sol.difference*10000/temperature) > rand)
             {
-                sol.difference = solutions[point.station].stationRate - sol.stationRate;
-                Instance.LogVerbose($"station {point.station.ID}: {solutions[point.station].stationRate} -> {sol.stationRate} ({sol.difference}({Math.Exp(-sol.difference/temperature)}))");
-                if (sol.difference < 0 || Math.Exp(-sol.difference/temperature) > Instance.Randomizer.NextDouble())
-                {
-                    solutions[point.station] = sol;
-                    pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
-                    Instance.LogVerbose($"new solution selected for station {point.station.ID}: ");
-                    Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
-                    Instance.LogVerbose($"pod: {sol.point.pod.ID}");
-                    Instance.LogVerbose($"bot: {sol.point.searchSpace.bot.ID}");
-                    return true;
-                }
-                 return false;
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                Instance.LogVerbose("selected");
+                return true;
             }
+            else
+                return false;
+        }
+        /// <summary>
+        /// Replan the path of the solution
+        /// </summary>
+        /// <param name="solutions"></param>
+        /// <param name="station"></param>
+        /// <param name="force">true will force update the solution. </param>
+        private bool replanSolution(ref Dictionary<OutputStation, Solution> solutions, OutputStation station, bool force = false)
+        {
+            var point = solutions[station].point;
+            var sol = createSolution(solutions, point, out var path);
+            if (sol == null) return false;
+
+            // may find solution not in init solution
+            if(!solutions.ContainsKey(point.station))
+            {
+                sol.difference = double.MaxValue;
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                return true;
+            }
+
+            sol.difference = solutions[point.station].stationRate - sol.stationRate;
+            double rand = Instance.Randomizer.NextDouble();
+            Instance.LogVerbose($"try replan station {point.station.ID}: difference: {sol.difference} ");
+            if (force || sol.difference < 0 || Math.Exp(-sol.difference*10000/temperature) > rand)
+            {
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                Instance.LogVerbose("selected");
+                return true;
+            }
+            else
+                return false;
+        }
+        /// <summary>
+        /// swap the pod of two solution.
+        /// </summary>
+        private bool swapSolution(ref Dictionary<OutputStation, Solution> solutions, OutputStation station1, OutputStation station2)
+        {
+            if(!solutions.ContainsKey(station1) || !solutions.ContainsKey(station2)) return false;
+            var point1 = solutions[station1].point;
+            var point2 = solutions[station2].point;
+            var space1 = point1.searchSpace;
+            var space2 = point2.searchSpace;
+            var pod1 = point1.pod;
+            var pod2 = point2.pod;
+
+            // find point with same pod in each others' search space
+            var newPoint1 = space1.points.FirstOrDefault(pt => pt.pod == pod2);
+            if(newPoint1 == null) return false;
+            var newPoint2 = space2.points.FirstOrDefault(pt => pt.pod == pod1);
+            if(newPoint2 == null) return false;
+
+            // try new solutions
+            var sol1 = createSolution(solutions, newPoint1, out var path1);
+            if(sol1 == null) return false;
+            // store old path1
+            //var oldPath1 = pathManager.GetSchedulePath(space1.bot);
+            pathManager.OverwriteScheduledPath(space1.bot, path1);
+            var sol2 = createSolution(solutions, newPoint2, out var path2);
+            // add old path back, may failed because path1 may can't be fully removed
+            // temporary solution: force replan path
+            replanSolution(ref solutions, station1, true);
+            //pathManager.OverwriteScheduledPath(space1.bot, oldPath1);
+            if(sol2 == null) return false;
+            sol1.difference = solutions[station1].stationRate - sol1.stationRate;
+            sol2.difference = solutions[station2].stationRate - sol2.stationRate;
+
+            // evaluate new solution
+            double rand = Instance.Randomizer.NextDouble();
+            Instance.LogVerbose($"try swap station {station1.ID} and {station2.ID}");
+            Instance.LogVerbose($"diff1: {sol1.difference} = {solutions[station1].stationRate} - {sol1.stationRate}");
+            Instance.LogVerbose($"diff2: {sol2.difference} = {solutions[station2].stationRate} - {sol2.stationRate}");
+            Instance.LogVerbose($"{Math.Exp(-(sol1.difference + sol2.difference) *10000/temperature)} > {rand}");
+            if (sol1.difference + sol2.difference < 0 || 
+                Math.Exp(-(sol1.difference + sol2.difference) *10000/temperature) > rand)
+            {
+                solutions[station1] = sol1;
+                solutions[station2] = sol2;
+                pathManager.OverwriteScheduledPath(space1.bot, path1);
+                pathManager.OverwriteScheduledPath(space2.bot, path2);
+                Instance.LogVerbose("swapped");
+                return true;
+            }
+            else // recover original path of station 1 by replan
+            {
+
+            }
+            return false;
         }
 
         /// <summary>
@@ -747,7 +845,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             return sol;
         }
 
-        
         /// <summary>
         /// Get pod selection and extract requests from the pod selection manager
         /// </summary>
