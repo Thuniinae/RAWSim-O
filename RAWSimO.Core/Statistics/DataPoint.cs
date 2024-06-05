@@ -70,6 +70,10 @@ namespace RAWSimO.Core.Statistics
             /// </summary>
             OB,
             /// <summary>
+            /// Name of the pod selector in use.
+            /// </summary>
+            PDS,
+            /// <summary>
             /// Name of the replenishment batcher in use.
             /// </summary>
             RB,
@@ -921,6 +925,18 @@ namespace RAWSimO.Core.Statistics
             /// The number of order batching calls.
             /// </summary>
             TimingOrderBatchingCount,
+            /// <summary>
+            /// The average time per pod selection call.
+            /// </summary>
+            TimingPodSelectionAvg,
+            /// <summary>
+            /// The overall time for pod selection.
+            /// </summary>
+            TimingPodSelectionOverall,
+            /// <summary>
+            /// The number of pod selection calls.
+            /// </summary>
+            TimingPodSelectionCount,
             // --> Custom controller performance logs
             /// <summary>
             /// A custom performance info by the respective controller.
@@ -1181,6 +1197,7 @@ namespace RAWSimO.Core.Statistics
             { FootPrintEntry.PS, typeof(string) },
             { FootPrintEntry.RP, typeof(string) },
             { FootPrintEntry.OB, typeof(string) },
+            { FootPrintEntry.PDS, typeof(string) },
             { FootPrintEntry.RB, typeof(string) },
             { FootPrintEntry.MM, typeof(string) },
             { FootPrintEntry.Warmup, typeof(double) },
@@ -1415,6 +1432,9 @@ namespace RAWSimO.Core.Statistics
             { FootPrintEntry.TimingOrderBatchingAvg, typeof(double) },
             { FootPrintEntry.TimingOrderBatchingOverall, typeof(double) },
             { FootPrintEntry.TimingOrderBatchingCount, typeof(int) },
+            { FootPrintEntry.TimingPodSelectionAvg, typeof(double) },
+            { FootPrintEntry.TimingPodSelectionOverall, typeof(double) },
+            { FootPrintEntry.TimingPodSelectionCount, typeof(int) },
             // --> Custom performance info
             { FootPrintEntry.CustomLogPPString, typeof(string) },
             { FootPrintEntry.CustomLogPP1, typeof(double) },
@@ -1502,6 +1522,10 @@ namespace RAWSimO.Core.Statistics
             _entryValues[FootPrintEntry.PS] = instance.ControllerConfig.PodStorageConfig.GetMethodName();
             _entryValues[FootPrintEntry.RP] = instance.ControllerConfig.RepositioningConfig.GetMethodName();
             _entryValues[FootPrintEntry.OB] = instance.ControllerConfig.OrderBatchingConfig.GetMethodName();
+            if(instance.ControllerConfig.TaskAllocationConfig.GetPodSelectionConfig() != null)
+                _entryValues[FootPrintEntry.PDS] = instance.ControllerConfig.TaskAllocationConfig.GetPodSelectionConfig().GetMethodName();
+            else
+                _entryValues[FootPrintEntry.PDS] = "DummyPodSelection";
             _entryValues[FootPrintEntry.RB] = instance.ControllerConfig.ReplenishmentBatchingConfig.GetMethodName();
             _entryValues[FootPrintEntry.MM] = instance.ControllerConfig.MethodManagementConfig.GetMethodName();
             // Meta-data
@@ -1741,6 +1765,9 @@ namespace RAWSimO.Core.Statistics
             _entryValues[FootPrintEntry.TimingOrderBatchingAvg] = instance.Observer.TimingOrderBatchingAverage;
             _entryValues[FootPrintEntry.TimingOrderBatchingOverall] = instance.Observer.TimingOrderBatchingOverall;
             _entryValues[FootPrintEntry.TimingOrderBatchingCount] = instance.Observer.TimingOrderBatchingDecisionCount;
+            _entryValues[FootPrintEntry.TimingPodSelectionAvg] = instance.Observer.TimingPodSelectionAverage;
+            _entryValues[FootPrintEntry.TimingPodSelectionOverall] = instance.Observer.TimingPodSelectionOverall;
+            _entryValues[FootPrintEntry.TimingPodSelectionCount] = instance.Observer.TimingPodSelectionDecisionCount;
             // Custom performance info
             _entryValues[FootPrintEntry.CustomLogPPString] = instance.StatCustomControllerInfo.CustomLogPPString;
             _entryValues[FootPrintEntry.CustomLogPP1] = instance.StatCustomControllerInfo.CustomLogPP1;

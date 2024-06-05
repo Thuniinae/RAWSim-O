@@ -976,6 +976,9 @@ namespace RAWSimO.Core
             sb.AppendLine("StatTimingOrderBatchingAverage: " + Observer.TimingOrderBatchingAverage.ToString(IOConstants.FORMATTER));
             sb.AppendLine("StatTimingOrderBatchingOverall: " + Observer.TimingOrderBatchingOverall.ToString(IOConstants.FORMATTER));
             sb.AppendLine("StatTimingOrderBatchingCount: " + Observer.TimingOrderBatchingDecisionCount.ToString(IOConstants.FORMATTER));
+            sb.AppendLine("StatTimingPodSelectionAverage: " + Observer.TimingPodSelectionAverage.ToString(IOConstants.FORMATTER));
+            sb.AppendLine("StatTimingPodSelectionOverall: " + Observer.TimingPodSelectionOverall.ToString(IOConstants.FORMATTER));
+            sb.AppendLine("StatTimingPodSelectionCount: " + Observer.TimingPodSelectionDecisionCount.ToString(IOConstants.FORMATTER));
             sb.AppendLine(">>> Overall");
             sb.AppendLine("StatOverallBundlesPlaced: " + StatOverallBundlesPlaced);
             sb.AppendLine("StatOverallItemsOrdered: " + StatOverallItemsOrdered);

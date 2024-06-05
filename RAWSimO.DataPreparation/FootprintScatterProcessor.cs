@@ -94,6 +94,7 @@ namespace RAWSimO.DataPreparation
             new Tuple<List<FootprintDatapoint.FootPrintEntry>, string>(new List<FootprintDatapoint.FootPrintEntry>() { FootprintDatapoint.FootPrintEntry.IS }, "scatterplotsmethodsis"),
             new Tuple<List<FootprintDatapoint.FootPrintEntry>, string>(new List<FootprintDatapoint.FootPrintEntry>() { FootprintDatapoint.FootPrintEntry.PS }, "scatterplotsmethodsps"),
             new Tuple<List<FootprintDatapoint.FootPrintEntry>, string>(new List<FootprintDatapoint.FootPrintEntry>() { FootprintDatapoint.FootPrintEntry.OB }, "scatterplotsmethodsob"),
+            new Tuple<List<FootprintDatapoint.FootPrintEntry>, string>(new List<FootprintDatapoint.FootPrintEntry>() { FootprintDatapoint.FootPrintEntry.PDS }, "scatterplotsmethodspds"),
         };
 
         /// <summary>

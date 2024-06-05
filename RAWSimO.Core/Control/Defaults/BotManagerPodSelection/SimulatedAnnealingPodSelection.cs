@@ -225,6 +225,19 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         /// </summary>
         public override void Update(double lastTime, double currentTime)
         {
+            // Measure time for decision
+            DateTime before = DateTime.Now;
+
+            doPodSelection(lastTime, currentTime);
+
+            // Calculate decision time
+            Instance.Observer.TimePodSelection((DateTime.Now - before).TotalSeconds);
+        }
+        /// <summary>
+        /// The start of this method. 
+        /// </summary>
+        void doPodSelection(double lastTime, double currentTime)
+        {
             if (_config.GreedyMethod) return; // do nothing if greedy method selected
 
             // only update once per update period
