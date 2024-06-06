@@ -7,6 +7,8 @@ using RAWSimO.Core.Control.Defaults.OrderBatching;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Items;
 using RAWSimO.Core.Management;
+using RAWSimO.MultiAgentPathFinding.DataStructures;
+using RAWSimO.Toolbox;
 
 namespace RAWSimO.Core.Control.Defaults.PodSelection
 {
@@ -48,19 +50,24 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         private FullySuppliedOrderManager orderManager;
         private PathManager pathManager;
         double temperature;
-        /// <summary>
-        /// Search space of each station in simulated annealing.
-        /// List of order: all orders that can be fulfilled by the pod
-        /// </summary>
-        private Dictionary<OutputStation,  SearchSpace> searchSpace = new();
 
-        private Dictionary<OutputStation, Solution> solution = new();
-
-        /// <summary>
-        /// Store all fulfillable orders in search space of stations
-        /// </summary>
-        private HashSet<Order> selectedOrders = new();
-
+        private class BotInfo
+        {
+            public Bot bot {get; private set;}
+            public double startTime {get; private set;}
+            public BotTaskType taskType {get; private set;}
+            public Waypoints.Waypoint startWaypoint  {get; private set;}
+            public BotInfo(Bot bot, double startTime, BotTaskType taskType)
+            {
+                this.bot = bot;
+                this.startTime = startTime;
+                this.taskType = taskType;
+                if (taskType == BotTaskType.None || taskType == BotTaskType.Rest)
+                    startWaypoint = bot.CurrentWaypoint;
+                else
+                    startWaypoint = bot.TargetWaypoint;
+            }
+        }
 
         private class Solution
         {
@@ -70,7 +77,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             /// </summary>
             public double stationRate;
             /// <summary>
-            /// Absolute difference between previous station rate
+            /// Difference between previous station rate (old - new solution). 
             /// </summary>
             public double difference = double.MaxValue;
             /// <summary>
@@ -90,7 +97,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
         private class SearchSpace
         {
-            public List<Point> points{get; private set;}
+            public List<Point> points{get; set;}
             public OutputStation station {get; private set;}
             public Bot bot {get; private set;}
             public double startTime {get; private set;}
@@ -113,7 +120,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             {
                 points = points.OrderByDescending(p => p.itemNum).Take(num).ToList();
             }
-            public void AddPoint(Pod pod, OutputStation station, List<Order> orders, int itemNum)
+            public void AddPoint(Pod pod, OutputStation station, HashSet<Order> orders, int itemNum)
             {
                 points.Add(new Point(pod, station, orders, itemNum, this));
             }
@@ -159,29 +166,30 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 int index = points.BinarySearch(new Point(weight), new PointComparator());
                 if (index < 0) // points[~index-1] < weight < points[~index]
                     index = ~index;
+                System.Console.WriteLine($"Pick {index}/{points.Count}");
                 if (index < 0 || index >= points.Count)
                     throw new Exception($"index {index} out of range (0, {points.Count}), weight: {weight}, cdf range: ({points.First().rateCDF},{points.Last().rateCDF})");
                 return points[index];
             }
             public class Point
             {
-                public SearchSpace searchSpace;
-                public Pod pod;
-                public OutputStation station;
+                public SearchSpace searchSpace {get; private set;}
+                public Pod pod {get; private set;}
+                public OutputStation station {get; private set;}
                 /// <summary>
                 /// Fully-fulfilled orders
                 /// </summary>
-                public List<Order> orders;
+                public HashSet<Order> orders {get; private set;}
                 /// <summary>
                 /// Number of items in fully-fulfilled orders
                 /// </summary>
-                public int itemNum = -1;
+                public int itemNum {get; private set;}
                 /// <summary>
                 /// Estimated item throughput rate after assigning this pod to station.
                 /// </summary>
                 public double rate = -1;
                 public double rateCDF = -1;
-                public Point(Pod pod, OutputStation station, List<Order> orders, int itemNum, SearchSpace s)
+                public Point(Pod pod, OutputStation station, HashSet<Order> orders, int itemNum, SearchSpace s)
                 {
                     this.pod = pod;
                     this.station =station;
@@ -232,58 +240,59 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 orderManager.FullySupplied(station, orderManager.pendingNotLateOrders);
             }
 
-            // try late orders first, then try not late orders
-            foreach(var undecidedOrders in new List<HashSet<Order>>(){orderManager.pendingLateOrders, orderManager.pendingNotLateOrders})
+            // only deal with station without pending Pods and still has capacity
+            var selectedStations = Instance.OutputStations.Where(s => pendingPods[s].Count == 0)
+                .Where(s => s.CapacityInUse + s.CapacityReserved < s.Capacity).ToList();
+            if (selectedStations.Count() == 0) return;
+
+            // find available bot and the time finishing their job
+            Instance.LogVerbose($"try to find bots from {selectedStations.Count} stations");
+            var botsInfo = GetBotsInfo(currentTime, selectedStations);
+            // no bot found
+            if(botsInfo.Keys.Count() == 0) return;
+            // Only do pod selection when at least a rest bot exist
+            if(!botsInfo.Values.Any(i => i.taskType == BotTaskType.Rest))
+                return;
+
+            pathManager.scheduleInit();
+            var searchSpaces = createSearchSpaces(botsInfo);
+            // check number of search space
+            if(searchSpaces.Count == 0) return;
+
+            var solutions = startSimulatedAnnealing(searchSpaces);
+
+            Instance.LogVerbose($"{solutions.Values.Count()} solutions are found.");
+            Instance.LogVerbose("Final Solution");
+            foreach(var sol in solutions.Values)
             {
-                if (undecidedOrders.Count == 0) continue;
-
-                if(!createSearchSpace(undecidedOrders)) continue;
-                Instance.LogVerbose($"{searchSpace.Keys.Count} search space are created.");
-
-                handleEmptySearchSpace(undecidedOrders);
-
-                Instance.LogVerbose($"{searchSpace.Keys.Count} search space are remained.");
-                if(searchSpace.Keys.Count == 0) continue; // no search space
-
-                startSimulatedAnnealing();
-
-                Instance.LogVerbose($"{solution.Values.Count()} solutions are found.");
-                foreach(var sol in solution.Values)
-                {
-                    Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
-                    Instance.LogVerbose($"pod: {string.Join(", ", sol.point.pod.ID)}");
-                    Instance.LogVerbose($"bot: {string.Join(", ", sol.point.searchSpace.bot.ID)}");
-                    Instance.LogVerbose("---");
-                }
-                
-
-                // output results from solution
-                foreach(var sol in solution.Values)
-                {
-                    var pt = sol.point;
-                    var s = pt.searchSpace;
-                    // assign bot
-                    ExtractTask task = new ExtractTask(Instance, s.bot, pt.pod, s.station, sol.podRequests);
-                    botManager.EnqueueTask(s.bot, task);
-                    botManager.logPodAssignment();
-                    //botManager.RequestNewTask(s.bot);
-                    // assign station request of inbound pods
-                    foreach(var d in sol.stationRequests)
-                    {
-                        botManager.AddExtract(d.Key, d.Value);
-                    }
-                    // allocate orders
-                    foreach(var order in sol.orders)
-                    {
-                        orderManager.AllocateOrder(order, s.station);
-                        undecidedOrders.Remove(order);
-                    }
-                    searchSpace.Remove(s.station);
-                    // statistic: record estimated station item throughput rate
-                }
-                solution.Clear();
+                Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
+                Instance.LogVerbose($"pod: {string.Join(", ", sol.point.pod.ID)}");
+                Instance.LogVerbose($"bot: {string.Join(", ", sol.point.searchSpace.bot.ID)}");
+                Instance.LogVerbose("---");
             }
-            searchSpace.Clear();
+
+            // output results from solution
+            foreach(var sol in solutions.Values)
+            {
+                var pt = sol.point;
+                var s = pt.searchSpace;
+                // assign bot
+                ExtractTask task = new ExtractTask(Instance, s.bot, pt.pod, s.station, sol.podRequests);
+                botManager.EnqueueTask(s.bot, task);
+                botManager.logPodAssignment();
+                //botManager.RequestNewTask(s.bot);
+                // assign station request of inbound pods
+                foreach(var d in sol.stationRequests)
+                {
+                    botManager.AddExtract(d.Key, d.Value);
+                }
+                // allocate orders
+                foreach(var order in sol.orders)
+                {
+                    orderManager.AllocateOrder(order, s.station);
+                }
+                // statistic: record estimated station item throughput rate
+            }
             Instance.LogVerbose("End of update.");
         }
         
@@ -299,281 +308,468 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             if (pathManager == null)
                 pathManager = Instance.Controller.PathManager;
         }
-        
+
         /// <summary>
-        /// create search space of each station
+        /// Get bots that are available for stations with information of end time of current task and current task type.
         /// </summary>
-        /// <param name="undecidedOrders"></param>
-        /// <returns>false, if no station has capacity left.</returns>
-        private bool createSearchSpace(HashSet<Order> undecidedOrders)
-        {
-            // only deal with station without pending Pods and still has capacity
-            var selectedStations = Instance.OutputStations.Where(s => pendingPods[s].Count == 0)
-                .Where(s => s.CapacityInUse + s.CapacityReserved < s.Capacity).ToList();
-            Instance.LogVerbose($"{selectedStations.Count()} stations are considered in this simulated annealing update.");
-            if (selectedStations.Count() == 0) return false;
-
-            selectedOrders.Clear();
-            pathManager.scheduleInit();
-
-            Instance.LogVerbose($"try to create {selectedStations.Except(searchSpace.Keys).Count()} search space");
-
-
-            // create search space of station if haven't exist: get next available bot and it's time of each station
-            foreach(var station in selectedStations.Except(searchSpace.Keys))
+        private Dictionary<OutputStation, BotInfo> GetBotsInfo(double CurrentTime, List<OutputStation> selectedStations)
+        { 
+            Dictionary<OutputStation, BotInfo> botsInfo = new();
+            // get next available bot and it's time of each station
+            foreach(var station in selectedStations)
             {
-                // TODO: select bot that is not extract task, accept park, rest, none
-                // TODO: make sure bot does't has extract task in task queue
                 var bots = botManager.stationBots[station]
-                    .Where(bot => (bot.CurrentTask.Type == BotTaskType.None)||(bot.CurrentTask.Type == BotTaskType.Rest))
+                    .Where(bot => (bot.CurrentTask.Type == BotTaskType.None)
+                        ||(bot.CurrentTask.Type == BotTaskType.Rest)
+                        ||(bot.CurrentTask.Type == BotTaskType.ParkPod))
                     .Where(bot => botManager.CountFutureTasks(bot) == 0); 
                 if(bots.Count() == 0) continue;
-                // Estimated bots' next available time
-                var botTime = bots.Select(bot => {
-                        var botN = bot as BotNormal; 
-                        var success = botN.EstimateFinishedTime(out double endTime);
+                //　pick rest or None bot first
+                var restBots = bots.Where(b => (b.CurrentTask.Type == BotTaskType.None) || (b.CurrentTask.Type == BotTaskType.Rest));
+                if (restBots.Count() > 0)
+                {
+                    botsInfo[station] = new BotInfo(restBots.First(), CurrentTime, BotTaskType.Rest);
+                }
+                else // bot with park pod task
+                {
+                    // find ending time of Park pod task from reservation table
+                    var botTime = bots.Select(bot =>
+                    {
+                        var success = pathManager.FindArrivalTime(out double endTime, bot); // may failed because  the path hasn't be reserved
                         return new Tuple<Bot, double, bool>(bot, endTime, success);
-                        });
-                System.Console.WriteLine($"station {station.ID}: {string.Join(", ", botTime.Select(t => $"{t.Item1}/{t.Item2}/{t.Item3}"))}");
-                var bestBotTime = botTime.Where(t => t.Item3).MinBy(t => t.Item2);
-                if(bestBotTime != null)
-                {
-                    searchSpace[station] = new SearchSpace(station, bestBotTime.Item1, bestBotTime.Item2);
-                }
-            }
-
-            if (searchSpace.Keys.Count() == 0) return false;
-            Instance.LogVerbose($"try to establish {searchSpace.Keys.Count()} search space");
-
-            foreach(var station in searchSpace.Keys)
-            {
-                var bot = searchSpace[station].bot;
-                var botStartTime = searchSpace[station].startTime;
-                // find fully-fulfilled pods and orders
-                foreach (var pod in Instance.ResourceManager.UnusedPods)
-                {
-                    var orders = new List<Order>();
-                    // Check all order backlog, where sufficient inventory is still available in the pod set with the new pod
-                    foreach (var order in undecidedOrders.Where(o => o.Positions.All(p =>
-                                station.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
-                    {
-                        orders.Add(order);
-                        if(!selectedOrders.Contains(order))
-                            selectedOrders.Add(order);
-                    }
-                    if (orders.Count > 0)
-                    {
-                        var itemNum = orders.Sum(o => o.Positions.Sum(p => p.Value));
-                        searchSpace[station].AddPoint(pod, station, orders, itemNum);
-                    }
-                }
-                // Do nothing if no fully-fulfilled orders
-                if(searchSpace[station].points.Count > 0)
-                {
-                    // Take certain amount of pods with most items
-                    searchSpace[station].KeepBest(_config.searchPodNum);
-                    // calculate item throughput rate in search space
-                    searchSpace[station].points.ForEach(pt => {
-                        pt.rate = 0;
-                        // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
-                        // Then calculate station item throughput rate by arrival time
-                        if(!pathManager.findPath(out double endTime, botStartTime, bot, bot.TargetWaypoint, pt.pod.Waypoint, false))
-                            return; // can't find path, thus throughput rate = 0
-                        endTime += Instance.LayoutConfig.PodTransferTime;
-                        if(!pathManager.findPath(out endTime, endTime, bot,  pt.pod.Waypoint, station.Waypoint, true))
-                            return;
-                        pt.rate = pt.itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, station.GetCurrentQueueTime()) 
-                                            + pt.itemNum * Instance.LayoutConfig.ItemPickTime); 
                     });
-                    // remove points with 0 rate
-                    searchSpace[station].points.RemoveAll(pt => pt.rate == 0);
-                    // process search space
-                    searchSpace[station].calculateCDF();
+                    // find bot with shortest arrival time
+                    var bestBotTime = botTime.Where(t => t.Item3).MinBy(t => t.Item2);
+                    if (bestBotTime != null)
+                        botsInfo[station] = new BotInfo(bestBotTime.Item1, bestBotTime.Item2, BotTaskType.ParkPod);
                 }
             }
+            return botsInfo;
+        }
+        
+        /// <summary>
+        /// create search space of each station and assign pod-set if no fully-fulfillable order can be found
+        /// </summary>
+        /// <returns>search space</returns>
+        private Dictionary<OutputStation, SearchSpace> createSearchSpaces(Dictionary<OutputStation, BotInfo> botsInfo)
+        {
+            Dictionary<OutputStation, SearchSpace> searchSpaces = new();
+            HashSet<Order> consideredOrders = new();
+            List<OutputStation> podSetStation = new(); // stations that need pod-set
+            List<Order> podSetOrders = new(); // orders fulfilled by pod-set
+            var iteration = new List<HashSet<Order>>(){orderManager.pendingLateOrders, orderManager.pendingNotLateOrders};
+            foreach(var (undecidedOrders, i) in iteration.Select((value, i) => (value, i)))
+            {
+                foreach(var (station, botInfo) in botsInfo.Select(d => (d.Key, d.Value)))
+                {
+                    // ignore station already assigned with pod set
+                    if(podSetStation.Any(s => s == station)) continue;
+                    // find fully-fulfilled pods and orders
+                    foreach (var pod in Instance.ResourceManager.UnusedPods)
+                    {
+                        var orders = new HashSet<Order>();
+                        // Check all order backlog, where sufficient inventory is still available in the pod set with the new pod
+                        foreach (var order in undecidedOrders.Where(o => o.Positions.All(p =>
+                                    station.CountAvailable(p.Key) + pod.CountAvailable(p.Key) >= p.Value)))
+                        {
+                            orders.Add(order);
+                            consideredOrders.Add(order);
+                        }
+                        if (orders.Count > 0)
+                        {
+                            var itemNum = orders.Sum(o => o.Positions.Sum(p => p.Value));
+                            if(!searchSpaces.ContainsKey(station)) 
+                                searchSpaces[station] = new(station, botInfo.bot, botInfo.startTime);
+                            searchSpaces[station].AddPoint(pod, station, orders, itemNum);
+                        }
+                    }
+                }
+                // deal with unconsidered orders with bot without search space
+                var unconsideredOrders = undecidedOrders.ExceptWithNew(consideredOrders);
+                foreach(var item in botsInfo.Where(i => !searchSpaces.Values.Any(s => s.bot == i.Value.bot)))
+                {
+                    if (unconsideredOrders.Count == 0) break;
+                    var station = item.Key;
+                    var botInfo = item.Value;
+                    // ignore station already assigned with pod set
+                    if(podSetStation.Any(s => s == station)) continue;
+                    var success = generatePodSet(out var selectedOrders, unconsideredOrders, station, botInfo);
+                    if(success)
+                    {
+                        podSetOrders.AddRange(selectedOrders);
+                        podSetStation.Add(station);
+                    }
+                }
+            }
+
+            // assign pod-set
+            foreach(var station in podSetStation)
+            {
+                assignFirstPodSet(station, botsInfo[station]);
+            }
+
+
+            // process points in search spaces
+            foreach(var (station, space) in searchSpaces.Select(d => (d.Key, d.Value)))
+            {
+                // Helpers
+                var bot = space.bot;
+                var botStartTime = botsInfo[station].startTime;
+
+                // remove orders used by pod-set
+                searchSpaces[station].points.RemoveAll(pt => pt.orders.Overlaps(podSetOrders));
+                if(searchSpaces[station].points.Count == 0) // no arrival able pod
+                {
+                    searchSpaces.Remove(station);
+                    continue;
+                }
+                // Take certain amount of pods with most items
+                searchSpaces[station].KeepBest(_config.searchPodNum);
+                // TODO: add some nearest pods
+                // calculate item throughput rate in search space
+                searchSpaces[station].points.ForEach(pt => {
+                    pt.rate = 0;
+                    // Estimate arrival time of the pod: May be time costly and not accurate, maybe some rough estimation is enough
+                    // Then calculate station item throughput rate by arrival time
+                    var startWaypoint = bot.TargetWaypoint; // for bot not in rest task (will no be executed unless bot except rest or None is selected)
+                    if(bot.CurrentTask.Type == BotTaskType.Rest) startWaypoint = bot.CurrentWaypoint; // since rest task will be canceled
+                    if(!pathManager.findPath(out double endTime, botStartTime, bot, startWaypoint, pt.pod.Waypoint, false))
+                        return; // can't find path, thus throughput rate = 0
+                    endTime += Instance.LayoutConfig.PodTransferTime;
+                    if(!pathManager.findPath(out endTime, endTime, bot,  pt.pod.Waypoint, station.Waypoint, true))
+                        return;
+                    pt.rate = pt.itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, station.GetCurrentQueueTime()) 
+                                        + pt.itemNum * Instance.LayoutConfig.ItemPickTime); 
+                });
+                // remove points with 0 rate
+                searchSpaces[station].points.RemoveAll(pt => pt.rate == 0);
+                if(searchSpaces[station].points.Count == 0) // no arrival able pod
+                {
+                    searchSpaces.Remove(station);
+                    continue;
+                }
+                // sort the points
+                searchSpaces[station].points = searchSpaces[station].points.OrderByDescending(p => p.rate).ToList();
+                // process search space
+                searchSpaces[station].calculateCDF();
+            }
+            return searchSpaces;
+        }
+        /// <summary>
+        /// Generate a pod-set by allocating a order from undecided orders. 
+        /// The selected order will be removed from undecided orders. 
+        /// </summary>
+        /// <returns>true, if the order can be fulfilled.</returns>
+        private bool generatePodSet(out HashSet<Order> podSetOrders,HashSet<Order> undecidedOrders, OutputStation station, BotInfo botInfo)
+        {
+            // helpers
+            Order fulfillableOrder = null;
+            Dictionary<ItemDescription, int> requiredAmount = null;
+            Dictionary<ItemDescription, List<Pod>> possiblePods = null;
+            podSetOrders = new();
+            // find an fulfillable order
+            foreach(var order in undecidedOrders)
+            {
+                // require amount is total amount in order minus station available
+                requiredAmount = new Dictionary<ItemDescription, int>(
+                    order.Positions.Where(p => p.Value - station.CountAvailable(p.Key) > 0).Select(p =>
+                    new KeyValuePair<ItemDescription, int>(p.Key, p.Value - station.CountAvailable(p.Key))));
+                // get possible pods contained with items in the order
+                possiblePods = new Dictionary<ItemDescription, List<Pod>>(requiredAmount.Select(
+                    r => new KeyValuePair<ItemDescription, List<Pod>>(r.Key, new List<Pod>(
+                        Instance.ResourceManager.UnusedPods.Where(pod => pod.CountAvailable(r.Key) > 0)
+                    ))
+                ));
+                // check if the order is fulfillable
+                if (!requiredAmount.Any(r => r.Value > possiblePods[r.Key].Sum(pod => pod.CountAvailable(r.Key))))
+                {
+                    fulfillableOrder = order;
+                    podSetOrders.Add(order);
+                    break;
+                }
+            }
+            if (fulfillableOrder == null) return false;
+
+            // greedy search from pod that can provided most item
+            foreach(var pod in possiblePods.SelectMany(d => d.Value).Distinct().OrderByDescending(pod => 
+                requiredAmount.Sum(r => Math.Min(r.Value, pod.CountAvailable(r.Key)))))
+            {
+                if(requiredAmount.All(r => r.Value <= 0))
+                    break;
+                // the pod can't supply any remaining required amount
+                else if (requiredAmount.Sum(d => Math.Min(d.Value, pod.CountAvailable(d.Key))) == 0)
+                    continue;
+                pendingPods[station].Add(pod);
+                // claim all pending pod to prevent be claimed by replenishment, reposition...
+                // pod will be released right after leaving pending pods and become selected pod
+                Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
+                foreach(var item in requiredAmount.Keys)
+                {
+                    int takePod = Math.Min(requiredAmount[item], pod.CountAvailable(item));
+                    requiredAmount[item] -= takePod;
+                }
+            }
+            // check negative number
+            if (requiredAmount.All(r => r.Value < 0))
+                throw new Exception("remaining required amount shouldn't smaller than 0.");
+            // Fully-Supplied should be done right after any success pod selection
+            var request = orderManager.ExtraDecideAboutPendingOrder(station, pendingPods[station], undecidedOrders, fulfillableOrder);
             
+            // deal with pending request
+            foreach(var pod in pendingPods[station])
+            {
+                // Check and init
+                if(!pendingExtracts.ContainsKey(pod))
+                    pendingExtracts.Add(pod, new List<ExtractRequest>());
+                else
+                    throw new Exception("The pod has remaining pending extract request!");
+                pendingExtracts[pod] = request[pod];
+                // check empty extract
+                if(pendingExtracts[pod].Count == 0)
+                {
+                    throw new Exception($"New pod {pod.ID} in pod set without assigning any extract request");
+                }
+                request.Remove(pod);
+            }
+            if(request.Keys.Count > 0)
+                throw new Exception("Remain requests not deal with!");
             return true;
         }
 
-        /// <summary>
-        /// Select pod-set for stations with empty search space and remove them
-        /// </summary>
-        /// <param name="undecidedOrders"></param>
-        private void handleEmptySearchSpace(HashSet<Order> undecidedOrders)
+        private void assignFirstPodSet(OutputStation station, BotInfo botInfo)
         {
-            foreach(var space in searchSpace.Values.Where(s => s.points.Count == 0))
-            {
-                foreach(var order in undecidedOrders.Except(selectedOrders)) // order by timestamp
-                {
-                    // Helpers
-                    var station = space.station;
+            // Helper
+            var bot = botInfo.bot;
+            // output one of the selected pod and extract requests
+            var pod = pendingPods[station].First();
+            pendingPods[station].Remove(pod);
+            // release pod for later extract request
+            Instance.ResourceManager.ReleasePod(pod);
+            var extractRequests = pendingExtracts[pod];
+            botManager.EnqueueTask(bot, new ExtractTask(Instance, bot, pod, station, extractRequests));
+            botManager.logPodAssignment();
+            // remove pending extracts
+            pendingExtracts.Remove(pod);
+            orderManager.SignalPodAssigned();
 
-                    // require amount is total amount in order minus station available
-                    var requiredAmount = new Dictionary<ItemDescription, int>(
-                        order.Positions.Where(p => p.Value - station.CountAvailable(p.Key) > 0).Select(p =>
-                        new KeyValuePair<ItemDescription, int>(p.Key, p.Value - station.CountAvailable(p.Key))));
-                    // get possible pods contained with items in the order
-                    var possiblePods = new Dictionary<ItemDescription, List<Pod>>(requiredAmount.Select(
-                        r => new KeyValuePair<ItemDescription, List<Pod>>(r.Key, new List<Pod>(
-                            Instance.ResourceManager.UnusedPods.Where(pod => pod.CountAvailable(r.Key) > 0)
-                        ))
-                    ));
-                    // check if the order is fulfillable
-                    if (requiredAmount.Any(r => r.Value > possiblePods[r.Key].Sum(pod => pod.CountAvailable(r.Key))))
-                        continue;
-                    // greedy search from pod that can provided most item
-                    foreach(var pod in possiblePods.SelectMany(d => d.Value).Distinct().OrderByDescending(pod => 
-                        requiredAmount.Sum(r => Math.Min(r.Value, pod.CountAvailable(r.Key)))))
-                    {
-                        if(requiredAmount.All(r => r.Value <= 0))
-                            break;
-                        // the pod can't supply any remaining required amount
-                        else if (requiredAmount.Sum(d => Math.Min(d.Value, pod.CountAvailable(d.Key))) == 0)
-                            continue;
-                        pendingPods[station].Add(pod);
-                        // claim all pending pod to prevent be claimed by replenishment, reposition...
-                        // pod will be released right after leaving pending pods and become selected pod
-                        Instance.ResourceManager.ClaimPod(pod, null, BotTaskType.None);
-                        foreach(var item in requiredAmount.Keys)
-                        {
-                            int takePod = Math.Min(requiredAmount[item], pod.CountAvailable(item));
-                            requiredAmount[item] -= takePod;
-                        }
-                    }
-                    // check negative number
-                    if (requiredAmount.All(r => r.Value < 0))
-                        throw new Exception("remaining required amount shouldn't smaller than 0.");
-                    else
-                    {
-                        // Fully-Supplied should be done right after any success pod selection
-                        var request = orderManager.ExtraDecideAboutPendingOrder(station, pendingPods[station], undecidedOrders, order);
-                        
-                        // deal with pending request
-                        foreach(var pod in pendingPods[station])
-                        {
-                            // Check and init
-                            if(!pendingExtracts.ContainsKey(pod))
-                                pendingExtracts.Add(pod, new List<ExtractRequest>());
-                            else
-                                throw new Exception("The pod has remaining pending extract request!");
-                            pendingExtracts[pod] = request[pod];
-                            // check empty extract
-                            if(pendingExtracts[pod].Count == 0)
-                            {
-                                throw new Exception($"New pod {pod.ID} in pod set without assigning any extract request");
-                            }
-                            request.Remove(pod);
-                        }
-                        if(request.Keys.Count > 0)
-                            throw new Exception("Remain requests not deal with!");
-                        // TODO: make reservation in solution, prevent affect by other solution
-                        break;
-                    }
-                }
-            }
-            // remove search space without point
-            searchSpace = searchSpace.Where(s => s.Value.points.Count > 0).ToDictionary(d => d.Key, d=> d.Value);
+            // try to make reservation of path in solution, prevent affect by other solution
+            // but it is ok to failed
+            List<ReservationTable.Interval> path = new();
+            var success = pathManager.schedulePath(out var endTime, ref path, botInfo.startTime, bot, botInfo.startWaypoint, pod.Waypoint, false);
+            endTime += Instance.LayoutConfig.PodTransferTime;
+            var successAgain = success && pathManager.schedulePath(out endTime, ref path, endTime, bot, pod.Waypoint, station.Waypoint, true);
+            if(success || successAgain) pathManager.OverwriteScheduledPath(bot, path);
+            return;
         }
 
-        private void startSimulatedAnnealing()
+        private Dictionary<OutputStation, Solution> startSimulatedAnnealing(Dictionary<OutputStation, SearchSpace> searchSpaces)
         {
+            Dictionary<OutputStation, Solution> solutions = new();
             // initialize the temperature
             temperature = _config.initTemp;
 
             // get initial solution by selecting one point for each station
-            foreach(var pair in searchSpace.OrderBy(d => d.Value.points.Count)) //
-            {
-                // get a pod from search space
-                var point = pair.Value.Pick(Instance.Randomizer.NextDouble());
-                updateSolution(point);
-            }
-            foreach(var sol in solution.Values)
-                {
-                    Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
-                    Instance.LogVerbose($"pod: {string.Join(", ", sol.point.pod.ID)}");
-                    Instance.LogVerbose($"bot: {string.Join(", ", sol.point.searchSpace.bot.ID)}");
-                    Instance.LogVerbose("---temp---");
-                }
-            
-            
+            foreach(var pair in searchSpaces.OrderBy(d => d.Value.points.Count)) //
+                initSolutions(ref solutions, pair.Value);
 
-            // do until temperature is too low, or (ignore for now)total item throughput rate converge
+            // do until temperature is too low, or item throughput rate converge
             int i = 0;
-            while(temperature > _config.minTemp && i < _config.maxIteration) 
+            while(temperature > _config.minTemp && i < _config.maxIteration)
             {
                 i++;
                 // generate a new solution by
                 // pick a random station TODO: higher probability of choosing station with more point
-                var station = searchSpace.Values.ToList()[Instance.Randomizer.NextInt(searchSpace.Values.Count)];
+                var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
                 // pick a point from the station's search space
-                var point = station.Pick(Instance.Randomizer.NextDouble());
-                // skip if pod exist
-                if (solution.Values.Any(s => s.point.pod == point.pod))
-                    continue;
+                var point = space.Pick(Instance.Randomizer.NextDouble());
 
-                var success = updateSolution(point);
+                updateSolutions(ref solutions, point);
 
                 // end iteration if all solution has small difference
-                if(solution.Values.All(s => s.difference < _config.minDifference))
+                if(solutions.Values.All(s => Math.Abs(s.difference) < _config.minDifference))
                     break;
 
                 // decrease temperature
                 temperature *= _config.coolingRate;
             }
+            return solutions;
         }
 
-
         /// <summary>
-        /// Update the solution with the point, if its item throughput rate is acceptable
+        /// Try every pod in search space to get a solution.
         /// </summary>
-        /// <param name="point"></param>
-        /// <returns>success</returns>
-        private bool updateSolution(SearchSpace.Point point)
+        private bool initSolutions(ref Dictionary<OutputStation, Solution> solutions, SearchSpace space)
         {
-            // only add point when pod doesn't exist in solution or there are no solution
-            if (solution.Values.Count > 0 && solution.Values.Any(so => so.point.pod == point.pod)) return false;
             Solution sol = null;
-            sol = createSolution(point);
-            if (sol == null) return false;
-
-            // accept if there are no solution for the station
-            if (!solution.ContainsKey(point.station))
+            foreach(var point in space.points)
             {
-                sol.difference =double.MaxValue;
-                solution.Add(point.station, sol);
-                return true;
-            }
-            else // Change the solution of the station when rate is higher or acceptable according to the temperature
-            {
-                sol.difference = solution[point.station].stationRate - sol.stationRate;
-                if (sol.difference < 0 || Math.Exp(-sol.difference/temperature) > Instance.Randomizer.NextDouble())
+                // skip exist pod
+                if(solutions.Values.Any(s => s.point.pod == point.pod)) continue;
+                sol = createSolution(solutions, point, out List<ReservationTable.Interval> path);
+                if(sol != null)
                 {
-                    solution[point.station] = sol;
+                    // store the solution
+                    sol.difference =double.MaxValue;
+                    solutions.Add(point.station, sol);
+                    pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
                     return true;
                 }
-                 return false;
             }
+            return false;
+        }
+
+        /// <summary>
+        /// Update the solutions with the point, if its item throughput rate is acceptable
+        /// </summary>
+        /// <returns>success</returns>
+        private bool updateSolutions(ref Dictionary<OutputStation, Solution> solutions, SearchSpace.Point point)
+        {
+            // check if pod already exist in other solutions
+            foreach(var (station, solution) in solutions.Select(d => (d.Key, d.Value)))
+            {
+                if(point.station == station)// ignore same station
+                {
+                    if(point.pod == solution.point.pod) return replanSolution(ref solutions, station);
+                    else continue;
+                }
+                if(point.pod == solution.point.pod) // swap point
+                {
+                    return swapSolution(ref solutions, station, point.searchSpace.station);
+                }
+            }
+
+            Solution sol = createSolution(solutions, point, out List<ReservationTable.Interval> path);
+            if (sol == null) return false;
+
+            // may find solution not in init solution
+            if(!solutions.ContainsKey(point.station))
+            {
+                sol.difference = double.MaxValue;
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                return true;
+            }
+
+            sol.difference = solutions[point.station].stationRate - sol.stationRate;
+            double rand = Instance.Randomizer.NextDouble();
+            Instance.LogVerbose($"try station {point.station.ID}: difference: {sol.difference} ");
+            if (sol.difference < 0 || Math.Exp(-sol.difference*10000/temperature) > rand)
+            {
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                Instance.LogVerbose("selected");
+                return true;
+            }
+            else
+                return false;
+        }
+        /// <summary>
+        /// Replan the path of the solution
+        /// </summary>
+        /// <param name="solutions"></param>
+        /// <param name="station"></param>
+        /// <param name="force">true will force update the solution. </param>
+        private bool replanSolution(ref Dictionary<OutputStation, Solution> solutions, OutputStation station, bool force = false)
+        {
+            var point = solutions[station].point;
+            var sol = createSolution(solutions, point, out var path);
+            if (sol == null) return false;
+
+            // may find solution not in init solution
+            if(!solutions.ContainsKey(point.station))
+            {
+                sol.difference = double.MaxValue;
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                return true;
+            }
+
+            sol.difference = solutions[point.station].stationRate - sol.stationRate;
+            double rand = Instance.Randomizer.NextDouble();
+            Instance.LogVerbose($"try replan station {point.station.ID}: difference: {sol.difference} ");
+            if (force || sol.difference < 0 || Math.Exp(-sol.difference*10000/temperature) > rand)
+            {
+                solutions[point.station] = sol;
+                pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
+                Instance.LogVerbose("selected");
+                return true;
+            }
+            else
+                return false;
+        }
+        /// <summary>
+        /// swap the pod of two solution.
+        /// </summary>
+        private bool swapSolution(ref Dictionary<OutputStation, Solution> solutions, OutputStation station1, OutputStation station2)
+        {
+            if(!solutions.ContainsKey(station1) || !solutions.ContainsKey(station2)) return false;
+            var point1 = solutions[station1].point;
+            var point2 = solutions[station2].point;
+            var space1 = point1.searchSpace;
+            var space2 = point2.searchSpace;
+            var pod1 = point1.pod;
+            var pod2 = point2.pod;
+
+            // find point with same pod in each others' search space
+            var newPoint1 = space1.points.FirstOrDefault(pt => pt.pod == pod2);
+            if(newPoint1 == null) return false;
+            var newPoint2 = space2.points.FirstOrDefault(pt => pt.pod == pod1);
+            if(newPoint2 == null) return false;
+
+            // try new solutions
+            var sol1 = createSolution(solutions, newPoint1, out var path1);
+            if(sol1 == null) return false;
+            // store old path1
+            //var oldPath1 = pathManager.GetSchedulePath(space1.bot);
+            pathManager.OverwriteScheduledPath(space1.bot, path1);
+            var sol2 = createSolution(solutions, newPoint2, out var path2);
+            // add old path back, may failed because path1 may can't be fully removed
+            // temporary solution: force replan path
+            replanSolution(ref solutions, station1, true);
+            //pathManager.OverwriteScheduledPath(space1.bot, oldPath1);
+            if(sol2 == null) return false;
+            sol1.difference = solutions[station1].stationRate - sol1.stationRate;
+            sol2.difference = solutions[station2].stationRate - sol2.stationRate;
+
+            // evaluate new solution
+            double rand = Instance.Randomizer.NextDouble();
+            Instance.LogVerbose($"try swap station {station1.ID} and {station2.ID}");
+            Instance.LogVerbose($"diff1: {sol1.difference} = {solutions[station1].stationRate} - {sol1.stationRate}");
+            Instance.LogVerbose($"diff2: {sol2.difference} = {solutions[station2].stationRate} - {sol2.stationRate}");
+            Instance.LogVerbose($"{Math.Exp(-(sol1.difference + sol2.difference) *10000/temperature)} > {rand}");
+            if (sol1.difference + sol2.difference < 0 || 
+                Math.Exp(-(sol1.difference + sol2.difference) *10000/temperature) > rand)
+            {
+                solutions[station1] = sol1;
+                solutions[station2] = sol2;
+                pathManager.OverwriteScheduledPath(space1.bot, path1);
+                pathManager.OverwriteScheduledPath(space2.bot, path2);
+                Instance.LogVerbose("swapped");
+                return true;
+            }
+            else // recover original path of station 1 by replan
+            {
+
+            }
+            return false;
         }
 
         /// <summary>
         /// Find orders in points' order but fulfilled
-        /// 1. not in solution of other station
+        /// 1. not in solutions of other station
         /// 2. consider remained item in pod and station
         /// </summary>
-        /// <param name="point"></param>
         /// <returns>
         /// null, if
         /// 1. no possible order.
         /// 2. can't find path in window.
         /// </returns>
-        private Solution createSolution(SearchSpace.Point point)
+        private Solution createSolution(Dictionary<OutputStation, Solution> solutions, SearchSpace.Point point, out List<ReservationTable.Interval> path)
         {
-            // can't create solution if pod is already in solution
-            if(solution.Values.Any(so => so.point.pod == point.pod)) return null;
-
             // Helpers
+            path = null;
             var station = point.station;
-            var otherSolution = solution.Values.Where(s => s.point.pod != point.pod);
+            var otherSolution = solutions.Values.Where(s => s.point.pod != point.pod);
             var possibleOrders = point.orders.Except(otherSolution.SelectMany(s => s.orders));
 
             if (possibleOrders.Count() == 0) return null;
@@ -633,17 +829,15 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
             // Helpers
             var s = point.searchSpace;
+            path = new();
             // estimate time of: bot -> pod
-            if(!pathManager.schedulePath(out double endTime, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false))
+            if(!pathManager.schedulePath(out double endTime, ref path, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false))
                 return null; // failed to find path in window
-
             // Add time of lifting pod
             endTime += Instance.LayoutConfig.PodTransferTime; 
-            
             // estimate time of: pod->station
-            if(!pathManager.schedulePath(out endTime, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true))
+            if(!pathManager.schedulePath(out endTime, ref path, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true))
                 return null; // / failed to find path in window
-
             // Estimated Item throughput rate of the station
             var itemNum = sol.orders.Sum(o => o.Positions.Sum(p => p.Value));
             sol.stationRate = itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, s.station.GetCurrentQueueTime()) 
@@ -651,7 +845,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             return sol;
         }
 
-        
         /// <summary>
         /// Get pod selection and extract requests from the pod selection manager
         /// </summary>
@@ -817,14 +1010,14 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                                     // check empty extract
                                     if(pendingExtracts[pod].Count == 0)
                                     {
-                                        System.Console.WriteLine($"order: {string.Join(", ", order.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
+                                        Instance.LogVerbose($"order: {string.Join(", ", order.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
                                         foreach(var p in pendingPods[oStation])
                                         {
-                                            System.Console.WriteLine($"pod {p.ID}: {string.Join(",", p.ItemDescriptionsContained.Select(i => $"{i.ID}({p.CountAvailable(i)})"))}");
+                                            Instance.LogVerbose($"pod {p.ID}: {string.Join(",", p.ItemDescriptionsContained.Select(i => $"{i.ID}({p.CountAvailable(i)})"))}");
                                         }
                                         foreach(var r in request)
                                         {
-                                            System.Console.WriteLine($"request of inbound pod {r.Key.ID}: {string.Join(", ", r.Value.Select(r => r.Item.ID))}");
+                                            Instance.LogVerbose($"request of inbound pod {r.Key.ID}: {string.Join(", ", r.Value.Select(r => r.Item.ID))}");
                                         }
                                         throw new Exception($"New pod {pod.ID} in pod set without assigning any extract request");
                                     }

@@ -150,6 +150,21 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
         }
 
         /// <summary>
+        /// Get the last reservation interval on a node
+        /// </summary>
+        /// <returns></returns>
+        public Interval GetLast(int node)
+        {
+            if (_intervallTrees[node] == null) return null;
+            else 
+            {
+                _intervallTrees[node].GetLastInterval(out double start, out double end);
+                if(start < 0 || end < 0) return null;
+                return new Interval(node, start, end);
+            }
+        }
+
+        /// <summary>
         /// Adds the specified interval.
         /// </summary>
         /// <param name="interval">The interval.</param>
@@ -209,8 +224,10 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
             if(!_intervallTrees[interval.Node].IntersectionFree(interval.Start, out int indexStart))
                 indexStart--;
             // find the index of last interval start < end
-            if(!_intervallTrees[interval.Node].IntersectionFree(interval.End, out int indexEnd))
-                indexEnd--;
+            int indexEnd = _intervallTrees[interval.Node].Count - 1;
+            if(!double.IsPositiveInfinity(interval.End))
+                if(!_intervallTrees[interval.Node].IntersectionFree(interval.End, out indexEnd))
+                    indexEnd--;
             if(indexStart < 0) indexStart = 0;
             if(indexEnd >= _intervallTrees[interval.Node].Count) indexEnd = _intervallTrees[interval.Node].Count - 1;
             // remove all index between

@@ -480,7 +480,7 @@ namespace RAWSimO.Core.Control
         /// Find path based on schedule table, will add path to schedule table if success.
         /// </summary>
         /// <returns>false, if can't find path</returns>
-        virtual public bool schedulePath(out double endTime, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
+        virtual public bool schedulePath(out double endTime, ref List<ReservationTable.Interval> path, double currentTime, Bot bot, Waypoint startWaypoint, Waypoint endWaypoint, bool carryingPod)
         {
             throw new Exception($"{this.GetType()} do not support schedulePath function!");
         }
@@ -493,6 +493,49 @@ namespace RAWSimO.Core.Control
         {
             throw new Exception($"{this.GetType()} do not support schedulePath function!");
         }
+
+        /// <summary>
+        /// Find the arrival time of a bot in the reservation table.
+        /// </summary>
+        /// <returns>false, if arrival time can't be found</returns>
+        virtual public bool FindArrivalTime(out double startTime, Bot bot)
+        {
+            throw new Exception($"{this.GetType()} do not support FindArrivalTime function!");
+        }
+
+        /// <summary>
+        /// Overwrite a bot's scheduled path
+        /// </summary>
+        virtual public void OverwriteScheduledPath(Bot bot,  List<ReservationTable.Interval> path)
+        {
+            throw new Exception($"{this.GetType()} do not support OverwriteScheduledPath function!");
+        }
+
+        /// <summary>
+        /// Add reservation to the schedule table
+        /// </summary>
+        virtual public void AddSchedule(List<ReservationTable.Interval> path)
+        {
+            throw new Exception($"{this.GetType()} do not support AddSchedule function!");
+        }
+
+        /// <summary>
+        /// Remove reservation from the schedule table
+        /// </summary>
+        virtual public void RemoveSchedule(List<ReservationTable.Interval> path)
+        {
+            throw new Exception($"{this.GetType()} do not support RemoveSchedule function!");
+        }
+
+        /// <summary>
+        /// Get the schedule path of the bot. 
+        /// </summary>
+        virtual public List<ReservationTable.Interval> GetSchedulePath(Bot bot)
+        {
+            throw new Exception($"{this.GetType()} do not support RemoveSchedule function!");
+        }
+
+
         #region IUpdateable Members
 
         /// <summary>
