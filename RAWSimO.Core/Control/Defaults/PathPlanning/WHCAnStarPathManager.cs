@@ -82,9 +82,9 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
                 if(carryingPod)
-                    endTime += Distances.CalculateShortestTimePathPodSafe(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 else
-                    endTime += Distances.CalculateShortestTimePath(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 // TODO: add penalty for possible collision
             }
             return success;
@@ -104,9 +104,9 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
                 if(carryingPod)
-                    endTime += Distances.CalculateShortestTimePathPodSafe(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 else
-                    endTime += Distances.CalculateShortestTimePath(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 // TODO: add penalty for possible collision
             }
             return success;
