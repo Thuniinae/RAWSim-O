@@ -7,6 +7,8 @@ using RAWSimO.Core.Control.Defaults.OrderBatching;
 using RAWSimO.Core.Elements;
 using RAWSimO.Core.Items;
 using RAWSimO.Core.Management;
+using RAWSimO.Core.Metrics;
+using RAWSimO.Core.Waypoints;
 using RAWSimO.MultiAgentPathFinding.DataStructures;
 using RAWSimO.Toolbox;
 
@@ -236,7 +238,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         /// <summary>
         /// The start of this method. 
         /// </summary>
-        void doPodSelection(double lastTime, double currentTime)
+        private void doPodSelection(double lastTime, double currentTime)
         {
             if (_config.GreedyMethod) return; // do nothing if greedy method selected
 
@@ -445,11 +447,14 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                     // Then calculate station item throughput rate by arrival time
                     var startWaypoint = bot.TargetWaypoint; // for bot not in rest task (will no be executed unless bot except rest or None is selected)
                     if(bot.CurrentTask.Type == BotTaskType.Rest) startWaypoint = bot.CurrentWaypoint; // since rest task will be canceled
-                    if(!pathManager.findPath(out double endTime, botStartTime, bot, startWaypoint, pt.pod.Waypoint, false))
-                        return; // can't find path, thus throughput rate = 0
+                    double endTime = botStartTime;
+                    endTime += Distances.EstimateManhattanTime(startWaypoint, pt.pod.Waypoint, Instance);
+                    if(double.IsInfinity(endTime)) return;
                     endTime += Instance.LayoutConfig.PodTransferTime;
-                    if(!pathManager.findPath(out endTime, endTime, bot,  pt.pod.Waypoint, station.Waypoint, true))
-                        return;
+                    var connectedPoints = pt.pod.Waypoint.GetInfoConnectedWaypoints().Cast<Waypoint>().ToList();
+                    var entryPoint = connectedPoints.Where(p => !p.GetInfoStorageLocation()).First(); // point before entering pod storage location
+                    endTime += Distances.EstimateManhattanTime(entryPoint, station.Waypoint, Instance);
+                    if(double.IsInfinity(endTime)) return;
                     pt.rate = pt.itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, station.GetCurrentQueueTime()) 
                                         + pt.itemNum * Instance.LayoutConfig.ItemPickTime); 
                 });
