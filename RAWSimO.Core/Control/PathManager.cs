@@ -277,6 +277,8 @@ namespace RAWSimO.Core.Control
                             getNodeType(a.Key.DestinationWaypoint);
                     })));
 #endif
+            // update priority of the bot
+            UpdateBotPriorities(botAgentsDict.Keys.Cast<Bot>().ToList());
 
             //get path => optimize!
             PathFinder.FindPaths(currentTime, botAgentsDict.Values.ToList());
@@ -534,8 +536,18 @@ namespace RAWSimO.Core.Control
         {
             throw new Exception($"{this.GetType()} do not support RemoveSchedule function!");
         }
-
-
+        /// <summary>
+        /// Update bots' priority from previous output of scheduling. 
+        /// Bot only get priority (> 0), when bot's current task match the task in scheduled. 
+        /// </summary>
+        virtual public void UpdateBotPriorities(List<Bot> bots) {/*Do nothing*/}
+        /// <summary>
+        /// Modify the priority of bot in path planning with the priority in schedule. 
+        /// </summary>
+        virtual public void OutputScheduledPriority(Dictionary<Bot, BotTask> _botsTask)
+        {
+            throw new Exception($"{this.GetType()} do not support OutputScheduledPriority function!");
+        }
         #region IUpdateable Members
 
         /// <summary>

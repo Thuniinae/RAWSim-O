@@ -287,6 +287,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             }
 
             // output results from solution
+            var botsTask = new Dictionary<Bot, BotTask>();
             foreach(var sol in solutions.Values)
             {
                 var pt = sol.point;
@@ -294,6 +295,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 // assign bot
                 ExtractTask task = new ExtractTask(Instance, s.bot, pt.pod, s.station, sol.podRequests);
                 botManager.EnqueueTask(s.bot, task);
+                botsTask[s.bot] = task; // for later schedule priority output
                 botManager.logPodAssignment();
                 //botManager.RequestNewTask(s.bot);
                 // assign station request of inbound pods
@@ -308,6 +310,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 }
                 // statistic: record estimated station item throughput rate
             }
+            pathManager.OutputScheduledPriority(botsTask);
         }
         
         /// <summary>
