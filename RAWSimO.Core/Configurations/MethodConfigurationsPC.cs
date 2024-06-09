@@ -1,4 +1,4 @@
-using RAWSimO.Core.Elements;
+﻿using RAWSimO.Core.Elements;
 using RAWSimO.Core.Metrics;
 using System;
 using System.Collections.Generic;
@@ -834,6 +834,11 @@ namespace RAWSimO.Core.Configurations
         /// The Method configurations are prioritized top-down. 
         /// </summary>
         public bool BruteForceMethod = false;
+        /// <summary>
+        /// Take the initial solution as final solution. 
+        /// The Method configurations are prioritized top-down. 
+        /// </summary>
+        public bool InitSolutionMethod = false;
         /// <summary>
         /// The time period in second between running Simulated Annealing.
         /// </summary>

@@ -614,7 +614,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             {
                 // do until temperature is too low, or item throughput rate converge
                 int i = 0;
-                while(temperature > _config.minTemp && i < _config.maxIteration)
+                while(temperature > _config.minTemp && i < _config.maxIteration && !_config.InitSolutionMethod)
                 {
                     i++;
                     // pick a random station
