@@ -776,7 +776,11 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             {
                 solutions[station1] = sol1;
                 solutions[station2] = sol2;
+                // temporary solution, need to plan again to prevent collision
+                createSolution(solutions, newPoint1, out path1);
                 pathManager.OverwriteScheduledPath(space1.bot, path1);
+                // temporary solution, need to plan again to prevent collision
+                createSolution(solutions, newPoint2, out path2);
                 pathManager.OverwriteScheduledPath(space2.bot, path2);
                 return true;
             }
