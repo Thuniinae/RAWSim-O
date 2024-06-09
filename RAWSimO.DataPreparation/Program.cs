@@ -163,6 +163,7 @@ namespace RAWSimO.DataPreparation
                                     FootprintDatapoint.FootPrintEntry.PS,
                                     FootprintDatapoint.FootPrintEntry.RB,
                                     FootprintDatapoint.FootPrintEntry.OB,
+                                    FootprintDatapoint.FootPrintEntry.PDS,
                                     FootprintDatapoint.FootPrintEntry.BotsPerOStation,
                                     FootprintDatapoint.FootPrintEntry.NOStations,
                                 },

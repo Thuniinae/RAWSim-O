@@ -23,6 +23,14 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
     /// </summary>
     public class WHCAnStarPathManager : PathManager
     {
+        /// <summary>
+        /// Priorities and the corresponding task of the bots. 
+        /// </summary>
+        private Dictionary<int, int> botsPriority;
+        /// <summary>
+        /// The corresponding task of the bots' priority. 
+        /// </summary>
+        private Dictionary<int, BotTask> botsTask;
 
         /// <summary>
         /// constructor
@@ -60,6 +68,8 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 method.RuntimeLimitPerAgent = config.Clocking / instance.Bots.Count;
                 method.RunTimeLimitOverall = config.Clocking;
             }
+            botsPriority = new();
+            botsTask = new();
         }
         /// <summary>
         /// Estimate ending time of a bot, using WHCA* reservation table.
@@ -82,9 +92,9 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
                 if(carryingPod)
-                    endTime += Distances.CalculateShortestTimePathPodSafe(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 else
-                    endTime += Distances.CalculateShortestTimePath(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 // TODO: add penalty for possible collision
             }
             return success;
@@ -104,9 +114,9 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
                 // estimated travel time of path outside of WHCA* window
                 var waypoint = bot.Instance.Controller.PathManager.GetWaypointByNodeId(agent.Path.LastAction.Node);
                 if(carryingPod)
-                    endTime += Distances.CalculateShortestTimePathPodSafe(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 else
-                    endTime += Distances.CalculateShortestTimePath(waypoint, endWaypoint, Instance);
+                    endTime += Distances.EstimateManhattanTime(waypoint, endWaypoint, Instance);
                 // TODO: add penalty for possible collision
             }
             return success;
@@ -165,6 +175,48 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         {
             var method = PathFinder as WHCAnStarMethod;
             return method.scheduledPath[bot.ID];
+        }
+        /// <summary>
+        /// Modify the priority of bot in path planning with the priority in schedule. 
+        /// </summary>
+        override public void OutputScheduledPriority(Dictionary<Bot, BotTask> _botsTask)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            // off set previous bots priority as the number of new bots task
+            foreach(var id in botsPriority.Keys)
+                botsPriority[id] += _botsTask.Count;
+            // priority start from 1, to separate from other bots which has priority 0
+            foreach(var (bot, task) in _botsTask.Select(d => (d.Key, d.Value)))
+            {
+                int priority = method.scheduleSequence.FindIndex(i => i == bot.ID) + 1; 
+                botsPriority[bot.ID] = priority;
+                botsTask[bot.ID] = task;
+            }
+        }
+
+        /// <summary>
+        /// Update bots' priority from previous output of scheduling. 
+        /// Bot only get priority (> 0), when bot's current task match the task in scheduled. 
+        /// </summary>
+        override public void UpdateBotPriorities(List<Bot> bots)
+        {
+            var method = PathFinder as WHCAnStarMethod;
+            // offset priority to start from 1
+            var minPriority = botsPriority.Values.Min() - 1;
+            if(minPriority > 0)
+                foreach(var id in botsPriority.Keys)
+                    botsPriority[id] -= minPriority;
+
+            // set priority of bots according to schedule and their task
+            foreach(var bot in bots)
+            {
+                if(!botsPriority.ContainsKey(bot.ID)) continue;
+                // only use priority when having same task
+                if(botsTask[bot.ID] == bot.CurrentTask) 
+                    method.UpdateAgentPriority(bot.ID, botsPriority[bot.ID]);
+                else
+                    method.UpdateAgentPriority(bot.ID, 0);
+            }
         }
     }
 }

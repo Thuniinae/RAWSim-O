@@ -47,6 +47,12 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         public Dictionary<int, List<ReservationTable.Interval>> scheduledPath {get; private set;}
 
         /// <summary>
+        /// Sequence (latest to earliest) of the scheduled path.
+        /// </summary>
+        public List<int> scheduleSequence {get; private set;}
+        public Dictionary<int, int> AgentPriorities {get; private set;}
+
+        /// <summary>
         /// The calculated reservations
         /// </summary>
         private Dictionary<int, List<ReservationTable.Interval>> _calculatedReservations;
@@ -79,6 +85,7 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             }
             if (UseDeadlockHandler)
                 _deadlockHandler = new DeadlockHandler(graph, seed);
+            AgentPriorities = new();
         }
 
         /// <summary>
@@ -103,8 +110,8 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 _reservationTable.Remove(_calculatedReservations[missingAgentId]);
 
             //sort Agents
-            agents = agents.OrderBy(a => a.CanGoThroughObstacles ? 1 : 0).ThenBy(a => Graph.getDistance(a.NextNode, a.DestinationNode)).ToList();
-
+            //agents = agents.OrderBy(a => Graph.getDistance(a.NextNode, a.DestinationNode)).ToList();
+            agents = agents.OrderByDescending(a => AgentPriorities.ContainsKey(a.ID)? AgentPriorities[a.ID]: 0).ThenBy(a => a.CanGoThroughObstacles ? 1 : 0).ThenBy(a => Graph.getDistance(a.NextNode, a.DestinationNode)).ToList();
             Dictionary<int, double> bias = new Dictionary<int, double>();
 
             //deadlock handling
@@ -316,6 +323,7 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             // copy reservation table
             scheduledTable = _reservationTable.DeepCopy();
             scheduledPath = new();
+            scheduleSequence = new();
         }
         /// <summary>
         /// Find path based on schedule table, will add path to schedule table if success.
@@ -383,6 +391,10 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             // add new scheduled path
             scheduledPath[ID] = path;
             scheduledTable.Add(path);
+            // store the priority of the bot
+            if(scheduleSequence.Contains(ID))
+                scheduleSequence.Remove(ID);
+            scheduleSequence.Insert(0, ID);
         }
         /// <summary>
         /// Find the starting time of the last reservation of a point if the point
@@ -402,6 +414,14 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 startTime = interval.Start;
                 return true;
             }
+        }
+
+        /// <summary>
+        /// Update the priority of the agent used in FindPaths.
+        /// </summary>
+        public void UpdateAgentPriority(int ID, int priority)
+        {
+            AgentPriorities[ID] = priority;
         }
     }
 }

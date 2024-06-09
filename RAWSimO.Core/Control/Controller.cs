@@ -55,13 +55,15 @@ namespace RAWSimO.Core.Control
             var PSconfig = instance.ControllerConfig.TaskAllocationConfig.GetPodSelectionConfig();
             switch(PSconfig?.GetMethodType())
             {
+                
+                case PodSelectionMethodType.SimulatedAnnealing: 
+                    PodSelectionManager = new SimulatedAnnealingPodSelectionManager(instance);
+                break;
                 // These methods are implemented in BotMangerPodSelection.cs for compatibility
                 case PodSelectionMethodType.Default:
                 case PodSelectionMethodType.FullyDemand:
                 case PodSelectionMethodType.HADOD:
-                break;
-                case PodSelectionMethodType.SimulatedAnnealing: 
-                    PodSelectionManager = new SimulatedAnnealingPodSelectionManager(instance);
+                default: // null: no pod selection
                 break;
             }
             // Init station manager

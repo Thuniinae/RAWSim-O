@@ -116,6 +116,7 @@ namespace RAWSimO.Core.Statistics
             _timingRepositioningOverall = 0.0; _timingRepositioningCount = 0;
             _timingReplenishmentBatchingOverall = 0.0; _timingReplenishmentBatchingCount = 0;
             _timingOrderBatchingOverall = 0.0; _timingOrderBatchingCount = 0;
+            _timingPodSelectionOverall = 0.0; _timingPodSelectionCount = 0;
         }
 
         /// <summary>
@@ -577,6 +578,14 @@ namespace RAWSimO.Core.Statistics
         /// The number of times order batching was called for a decision.
         /// </summary>
         private int _timingOrderBatchingCount = 0;
+        /// <summary>
+        /// The overall time spent in deciding the station for an order.
+        /// </summary>
+        private double _timingPodSelectionOverall = 0.0;
+        /// <summary>
+        /// The number of times order batching was called for a decision.
+        /// </summary>
+        private int _timingPodSelectionCount = 0;
 
         /// <summary>
         /// The overall time spent deciding / planning.
@@ -675,6 +684,19 @@ namespace RAWSimO.Core.Statistics
         public int TimingOrderBatchingDecisionCount { get { return _timingOrderBatchingCount; } }
 
         /// <summary>
+        /// The overall time spent in order batching.
+        /// </summary>
+        public double TimingPodSelectionOverall { get { return _timingPodSelectionOverall; } }
+        /// <summary>
+        /// The average time consumed for making a single decision.
+        /// </summary>
+        public double TimingPodSelectionAverage { get { return _timingPodSelectionCount == 0 ? 0 : _timingPodSelectionOverall / _timingPodSelectionCount; } }
+        /// <summary>
+        /// The number of decisions done for order batching.
+        /// </summary>
+        public int TimingPodSelectionDecisionCount { get { return _timingPodSelectionCount; } }
+
+        /// <summary>
         /// Signals this monitor that a path planning decision just happened and logs the time it took to decide in s.
         /// </summary>
         /// <param name="time">The time it took to determine the path in seconds.</param>
@@ -709,6 +731,11 @@ namespace RAWSimO.Core.Statistics
         /// </summary>
         /// <param name="time">The time it took to determine the output-station for the order.</param>
         public void TimeOrderBatching(double time) { _timingOrderBatchingOverall += time; _timingOrderBatchingCount++; _timingDecisionsOverall += time; }
+        /// <summary>
+        /// Signals this monitor that a order batching decision just happened and logs the time it took do decide in s.
+        /// </summary>
+        /// <param name="time">The time it took to determine the output-station for the order.</param>
+        public void TimePodSelection(double time) { _timingPodSelectionOverall += time; _timingPodSelectionCount++; _timingDecisionsOverall += time; }
 
         #endregion
 
@@ -1037,6 +1064,7 @@ namespace RAWSimO.Core.Statistics
                         new Tuple<string, double>(FootprintDatapoint.FootPrintEntry.PS.ToString(), _timingPodStorageOverall),
                         new Tuple<string, double>(FootprintDatapoint.FootPrintEntry.RB.ToString(), _timingReplenishmentBatchingOverall),
                         new Tuple<string, double>(FootprintDatapoint.FootPrintEntry.OB.ToString(), _timingOrderBatchingOverall),
+                        new Tuple<string, double>(FootprintDatapoint.FootPrintEntry.PDS.ToString(), _timingPodSelectionOverall),
                         new Tuple<string, double>(FootprintDatapoint.FootPrintEntry.RP.ToString(), _timingRepositioningOverall),
                     }
                     ));
