@@ -82,7 +82,7 @@ namespace RAWSimO.MultiAgentPathFinding.DataStructures
                 if(_intervallTrees[node] != null) 
                     trees[node] = _intervallTrees[node].DeepCopy();
             }
-            return new ReservationTable(_graph, trees, new HashSet<int>(_touchedNodes), _storeAgentIds, _storePrios);
+            return new ReservationTable(_graph, trees, _touchedNodes == null? null: new HashSet<int>(_touchedNodes), _storeAgentIds, _storePrios);
         }
 
         /// <summary>

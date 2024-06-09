@@ -43,6 +43,20 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         /// Reservation Table
         /// </summary>
         public ReservationTable _reservationTable;
+        public ReservationTable scheduledTable {get; private set;}
+
+        public Dictionary<int, List<ReservationTable.Interval>> scheduledPath {get; private set;}
+
+        /// <summary>
+        /// Sequence (latest to earliest) of the scheduled path.
+        /// </summary>
+        public List<int> scheduleSequence {get; private set;}
+        public Dictionary<int, int> AgentPriorities {get; private set;}
+
+        /// <summary>
+        /// The calculated reservations
+        /// </summary>
+        private Dictionary<int, List<ReservationTable.Interval>> _calculatedReservations;
 
         /// <summary>
         /// The deadlock handler
@@ -64,6 +78,8 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
             _reservationTable = new ReservationTable(graph);
             if (UseDeadlockHandler)
                 _deadlockHandler = new DeadlockHandler(graph, seed);
+            _calculatedReservations = new();
+            AgentPriorities = new();
         }
 
         /// <summary>
@@ -179,9 +195,22 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 if (found)
                 {
                     aStar.GetPathAndReservations(ref agent.Path, out reservations);
-
+                    // only for scheduling
+                    _calculatedReservations[agent.ID] = reservations;
                     foreach (var reservation in reservations)
                         _reservationTable.Add(reservation);
+                    //add reservation to infinity
+                    var lastNode = (_calculatedReservations[agent.ID].Count > 0) ? _calculatedReservations[agent.ID][_calculatedReservations[agent.ID].Count - 1].Node : agent.NextNode;
+                    var lastTime = (_calculatedReservations[agent.ID].Count > 0) ? _calculatedReservations[agent.ID][_calculatedReservations[agent.ID].Count - 1].End : currentTime;
+                    _calculatedReservations[agent.ID].Add(new ReservationTable.Interval(lastNode, lastTime, double.PositiveInfinity));
+                    try
+                    {
+                        _reservationTable.Add(lastNode, lastTime, double.PositiveInfinity);
+                    }
+                    catch (DisjointIntervalTree.IntervalIntersectionException)
+                    {
+                        //This could technically fail => especially when they come from a station
+                    }
                 }
 
                 //+ RRA* Nodes
@@ -248,6 +277,117 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
         private void SortAgents(ref List<Agent> agents, Dictionary<int, int> agentPrios)
         {
             agents = agents.OrderByDescending(a => agentPrios[a.ID]).ThenBy(a => a.CanGoThroughObstacles ? 1 : 0).ThenBy(a => Graph.getDistance(a.NextNode, a.DestinationNode)).ToList();
+        }
+                /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        public void scheduleInit()
+        {
+            // copy reservation table
+            scheduledTable = _reservationTable.DeepCopy();
+            scheduledPath = new();
+            scheduleSequence = new();
+        }
+        /// <summary>
+        /// Find path based on schedule table, will add path to schedule table if success.
+        /// </summary>
+        /// <param name="overwrite">input true to overwrite previous schedule path of the agent</param>
+        /// <returns>false, if can't find path</returns>
+        public bool schedulePath(out double endTime, ref List<ReservationTable.Interval> path, double startTime, Agent agent)
+        {
+            if (agent != null) 
+            {
+                // init schedule path of the agent
+                if(!scheduledPath.ContainsKey(agent.ID))
+                {
+                    if(_calculatedReservations.ContainsKey(agent.ID))
+                        scheduledPath[agent.ID] = new List<ReservationTable.Interval>(_calculatedReservations[agent.ID]);
+                    else
+                        scheduledPath[agent.ID] = new();
+                    // remove reservation of the starting point, because WHCAn* will reserve the ending waypoint of the existed path of the bot
+                    var interval = scheduledTable.Get(agent.NextNode, startTime, startTime + LengthOfAWindow);
+                    if(interval != null) scheduledTable.Remove(interval); // since only scheduling, no need to add back
+                }
+
+                //Create RRA* search if necessary.
+                //Necessary if the agent has none or the agents destination has changed
+                ReverseResumableAStar rraStar;
+                if (!rraStars.TryGetValue(agent.ID, out rraStar) || rraStar.StartNode != agent.DestinationNode ||
+                    UseDeadlockHandler && _deadlockHandler.IsInDeadlock(agent, startTime)) // TODO this last expression is used to set back the state of the RRA* in case of a deadlock - this is only a hotfix
+                {
+                    rraStars[agent.ID] = new ReverseResumableAStar(Graph, agent, agent.Physics, agent.DestinationNode);
+                }
+
+                // ignore the bot's path for now
+                scheduledTable.CarefulRemoves(scheduledPath[agent.ID]);
+                // consider extra path
+                scheduledTable.Add(path);
+
+                //search my path to the goal (within time window)
+                var aStar = new SpaceTimeAStar(Graph, LengthOfAWaitStep, startTime + LengthOfAWindow, scheduledTable, agent, rraStars[agent.ID]);
+                var found = aStar.Search();
+
+                // remove extra path
+                scheduledTable.CarefulRemoves(path);
+                // add ignore bot's path back
+                scheduledTable.Add(scheduledPath[agent.ID]);
+
+                if(found) 
+                {
+                    List<ReservationTable.Interval> reservations;
+                    aStar.GetPathAndReservations(ref agent.Path, out reservations);
+                    endTime = reservations.Last().End;
+                    path.AddRange(reservations);
+                    return true;
+                }
+            }
+            // failed to find path
+            endTime = double.MaxValue;
+            return false;
+        }
+        /// <summary>
+        /// Initialization of scheduling paths based on current reservation table. 
+        /// Scheduled paths will not affect real reservation table.
+        /// </summary>
+        public void OverwriteScheduledPath(int ID,  List<ReservationTable.Interval> path)
+        {
+            // remove previous scheduled path
+            scheduledTable.CarefulRemoves(scheduledPath[ID]);
+            // add new scheduled path
+            scheduledPath[ID] = path;
+            scheduledTable.Add(path);
+            // store the priority of the bot
+            if(scheduleSequence.Contains(ID))
+                scheduleSequence.Remove(ID);
+            scheduleSequence.Insert(0, ID);
+        }
+        /// <summary>
+        /// Find the starting time of the last reservation of a point if the point
+        /// is the ending point of a reserved path.
+        /// </summary>
+        /// <returns>false, if the input point does not have reservation to infinity.</returns>
+        virtual public bool findEndReservation(out double startTime, int node)
+        {
+            var interval  = _reservationTable.GetLast(node);
+            if (interval == null || !double.IsInfinity(interval.End))
+            {
+                startTime = -1;
+                return false;
+            }
+            else
+            { 
+                startTime = interval.Start;
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Update the priority of the agent used in FindPaths.
+        /// </summary>
+        public void UpdateAgentPriority(int ID, int priority)
+        {
+            AgentPriorities[ID] = priority;
         }
     }
 }
