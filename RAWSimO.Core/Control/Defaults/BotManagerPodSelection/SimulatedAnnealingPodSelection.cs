@@ -38,6 +38,10 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         /// </summary>
         private SimulatedAnnealingPodSelectionConfiguration _config;
         /// <summary>
+        /// The time of current update start. To prevent exceed update period in Simulated Annealing process. 
+        /// </summary>
+        private DateTime startUpdate;
+        /// <summary>
         /// Pod sets of stations prepared to be assigned to stations
         /// </summary>
         private Dictionary<OutputStation, List<Pod>> pendingPods = null;
@@ -223,12 +227,12 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         public override void Update(double lastTime, double currentTime)
         {
             // Measure time for decision
-            DateTime before = DateTime.Now;
+            startUpdate = DateTime.Now;
 
             doPodSelection(lastTime, currentTime);
 
             // Calculate decision time
-            Instance.Observer.TimePodSelection((DateTime.Now - before).TotalSeconds);
+            Instance.Observer.TimePodSelection((DateTime.Now - startUpdate).TotalSeconds);
         }
         /// <summary>
         /// The start of this method. 
@@ -270,16 +274,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             if(searchSpaces.Count == 0) return;
 
             var solutions = startSimulatedAnnealing(searchSpaces);
-
-            Instance.LogVerbose($"{solutions.Values.Count()} solutions are found.");
-            Instance.LogVerbose("Final Solution");
-            foreach(var sol in solutions.Values)
-            {
-                Instance.LogVerbose($"orders: {string.Join(", ", sol.orders.Select(o => string.Join(", ", o.Positions.Select(p => $"{p.Key.ID}({p.Value})"))))}");
-                Instance.LogVerbose($"pod: {string.Join(", ", sol.point.pod.ID)}");
-                Instance.LogVerbose($"bot: {string.Join(", ", sol.point.searchSpace.bot.ID)}");
-                Instance.LogVerbose("---");
-            }
 
             // output results from solution
             var botsTask = new Dictionary<Bot, BotTask>();
@@ -613,10 +607,9 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             else
             {
                 // do until temperature is too low, or item throughput rate converge
-                int i = 0;
-                while(temperature > _config.minTemp && i < _config.maxIteration && !_config.InitSolutionMethod)
+                while(!_config.InitSolutionMethod && temperature > _config.minTemp 
+                      && (DateTime.Now - startUpdate).TotalSeconds > _config.updatePeriod - 0.01) // remain 10ms to output solutions
                 {
-                    i++;
                     // pick a random station
                     var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
                     // pick a point from the station's search space
@@ -652,7 +645,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                     sol.difference =double.MaxValue;
                     solutions.Add(point.station, sol);
                     pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
-                    Instance.LogVerbose($"Initial solution selected for station {point.station.ID}: ");
                     return true;
                 }
             }
@@ -1046,18 +1038,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                                     pendingExtracts[pod] = request[pod];
                                     // check empty extract
                                     if(pendingExtracts[pod].Count == 0)
-                                    {
-                                        Instance.LogVerbose($"order: {string.Join(", ", order.Positions.Select(o=> $"{o.Key.ID}({o.Value})"))}");
-                                        foreach(var p in pendingPods[oStation])
-                                        {
-                                            Instance.LogVerbose($"pod {p.ID}: {string.Join(",", p.ItemDescriptionsContained.Select(i => $"{i.ID}({p.CountAvailable(i)})"))}");
-                                        }
-                                        foreach(var r in request)
-                                        {
-                                            Instance.LogVerbose($"request of inbound pod {r.Key.ID}: {string.Join(", ", r.Value.Select(r => r.Item.ID))}");
-                                        }
                                         throw new Exception($"New pod {pod.ID} in pod set without assigning any extract request");
-                                    }
                                     request.Remove(pod);
                                 }
                                 if(request.Keys.Count > 0)

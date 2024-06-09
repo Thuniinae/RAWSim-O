@@ -860,10 +860,6 @@ namespace RAWSimO.Core.Configurations
         /// </summary>
         public int searchPodNum = 50;
         /// <summary>
-        /// Maximum iteration of the algorithm.
-        /// </summary>
-        public int maxIteration = 100;
-        /// <summary>
         /// End the algorithm when all stations considered in the algorithm have item throughput rate difference smaller than this value.
         /// </summary>
         public double minDifference = 0.001;
