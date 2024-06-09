@@ -129,7 +129,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
             /// <summary>
             /// Calculate cumulative distribution function of the rate, 
-            /// and remove points with rate smaller than 1% of total rate
             /// </summary>
             /// <exception cref="Exception"></exception>
             public void calculateCDF(){
@@ -138,8 +137,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 // normalize rate
                 double total = points.Sum(pt => pt.rate);
                 points.ForEach(pt => {pt.rate /= total;});
-                // remove points with rate smaller than 1%
-                points.RemoveAll(pt => pt.rate < 0.01);
                 
                 double cdf = 0.0;
                 foreach(var pt in points)
@@ -168,8 +165,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 int index = points.BinarySearch(new Point(weight), new PointComparator());
                 if (index < 0) // points[~index-1] < weight < points[~index]
                     index = ~index;
-                System.Console.WriteLine($"Pick {index}/{points.Count}");
-                System.Console.WriteLine($"From: {string.Join(", ", points.Select(p => $"pod: {p.pod.ID}/num: {p.itemNum}/rate: {p.rate}"))}");
                 if (index < 0 || index >= points.Count)
                     throw new Exception($"index {index} out of range (0, {points.Count}), weight: {weight}, cdf range: ({points.First().rateCDF},{points.Last().rateCDF})");
                 return points[index];
