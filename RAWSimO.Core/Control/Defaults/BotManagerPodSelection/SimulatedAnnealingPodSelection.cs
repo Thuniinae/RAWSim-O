@@ -608,7 +608,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             {
                 // do until temperature is too low, or item throughput rate converge
                 while(!_config.InitSolutionMethod && temperature > _config.minTemp 
-                      && (DateTime.Now - startUpdate).TotalSeconds > _config.updatePeriod - 0.01) // remain 10ms to output solutions
+                      && (DateTime.Now - startUpdate).TotalSeconds < _config.updatePeriod - 0.01) // remain 10ms to output solutions
                 {
                     // pick a random station
                     var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
