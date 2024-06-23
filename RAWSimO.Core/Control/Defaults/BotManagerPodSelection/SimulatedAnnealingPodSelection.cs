@@ -408,12 +408,15 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 }
             }
 
+            // remove pods used by pod-set
+            foreach(var (station, space) in searchSpaces.Select(d => (d.Key, d.Value)))
+                searchSpaces[station].points.RemoveAll(pt => pendingPods.SelectMany(d => d.Value).Contains(pt.pod));
+                
             // assign pod-set
             foreach(var station in podSetStation)
             {
                 assignFirstPodSet(station, botsInfo[station]);
             }
-
 
             // process points in search spaces
             foreach(var (station, space) in searchSpaces.Select(d => (d.Key, d.Value)))
@@ -421,7 +424,6 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 // Helpers
                 var bot = space.bot;
                 var botStartTime = botsInfo[station].startTime;
-
                 // remove orders used by pod-set
                 searchSpaces[station].points.RemoveAll(pt => pt.orders.Overlaps(podSetOrders));
                 if(searchSpaces[station].points.Count == 0) // no arrival able pod
@@ -608,7 +610,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             {
                 // do until temperature is too low, or item throughput rate converge
                 while(!_config.InitSolutionMethod && temperature > _config.minTemp 
-                      && (DateTime.Now - startUpdate).TotalSeconds > _config.updatePeriod - 0.01) // remain 10ms to output solutions
+                      && (DateTime.Now - startUpdate).TotalSeconds < _config.updatePeriod - 0.01) // remain 10ms to output solutions
                 {
                     // pick a random station
                     var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];

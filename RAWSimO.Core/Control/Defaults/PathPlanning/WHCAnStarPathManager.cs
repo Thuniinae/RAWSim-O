@@ -202,10 +202,13 @@ namespace RAWSimO.Core.Control.Defaults.PathPlanning
         {
             var method = PathFinder as WHCAnStarMethod;
             // offset priority to start from 1
-            var minPriority = botsPriority.Values.Min() - 1;
-            if(minPriority > 0)
-                foreach(var id in botsPriority.Keys)
-                    botsPriority[id] -= minPriority;
+            if(botsPriority.Count > 0)
+            {
+                var minPriority = botsPriority.Values.Min() - 1;
+                if(minPriority > 0)
+                    foreach(var id in botsPriority.Keys)
+                        botsPriority[id] -= minPriority;
+            }
 
             // set priority of bots according to schedule and their task
             foreach(var bot in bots)

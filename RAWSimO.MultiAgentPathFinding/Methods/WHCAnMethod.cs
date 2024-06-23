@@ -372,9 +372,17 @@ namespace RAWSimO.MultiAgentPathFinding.Methods
                 if(found) 
                 {
                     aStar.GetPathAndReservations(ref agent.Path, out List<ReservationTable.Interval> reservations);
-                    endTime = reservations.Last().End;
-                    path.AddRange(reservations);
-                    return true;
+                    if(reservations.Count == 0) // happens when no path found in time window
+                    {
+                        endTime = double.MaxValue;
+                        return false;
+                    }
+                    else
+                    {
+                        endTime = reservations.Last().End;
+                        path.AddRange(reservations);
+                        return true;
+                    }
                 }
             }
             endTime = double.MaxValue;
