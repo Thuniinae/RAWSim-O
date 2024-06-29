@@ -31,6 +31,19 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             pendingPods = new Dictionary<OutputStation, List<Pod>>(Instance.OutputStations.Select(s => new KeyValuePair<OutputStation, List<Pod>>(s, null)));
             foreach(var station in Instance.OutputStations)
                 pendingPods[station] = new List<Pod>();
+
+            switch(_config.method)
+            {
+                case SimulatedAnnealingPodSelectionMethod.ImmediateGreedy:
+                case SimulatedAnnealingPodSelectionMethod.PeriodicGreedy:
+                    schedulePath = false;
+                    break;
+                case SimulatedAnnealingPodSelectionMethod.PeriodicBruteForce:
+                case SimulatedAnnealingPodSelectionMethod.PeriodicSimulatedAnnealing:
+                default:
+                    schedulePath = true;
+                    break;
+            }
         }
 
         /// <summary>
@@ -55,6 +68,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         private BotManager botManager;
         private FullySuppliedOrderManager orderManager;
         private PathManager pathManager;
+        private bool schedulePath;
         double temperature;
 
         private class BotInfo
@@ -222,11 +236,13 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         public override double GetNextEventTime(double currentTime) { return nextUpdateTime; }
 
         /// <summary>
-        /// 
+        /// Updates the element to the specified time.
         /// </summary>
         public override void Update(double lastTime, double currentTime)
         {
-            // Measure time for decision
+            if(_config.method == SimulatedAnnealingPodSelectionMethod.ImmediateGreedy) return;
+
+            // Measure time for decision.
             startUpdate = DateTime.Now;
 
             doPodSelection(lastTime, currentTime);
@@ -235,12 +251,10 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             Instance.Observer.TimePodSelection((DateTime.Now - startUpdate).TotalSeconds);
         }
         /// <summary>
-        /// The start of this method. 
+        /// Do Pick Pod Selection (PPS) and Pick Order Assignment(POA).  
         /// </summary>
         private void doPodSelection(double lastTime, double currentTime)
         {
-            if (_config.GreedyMethod) return; // do nothing if greedy method selected
-
             // only update once per update period
             if(nextUpdateTime > currentTime) return;
             nextUpdateTime = currentTime + _config.updatePeriod;
@@ -268,38 +282,31 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             if(!botsInfo.Values.Any(i => i.taskType == BotTaskType.Rest))
                 return;
 
-            pathManager.scheduleInit();
+            if (schedulePath) pathManager.scheduleInit();
             var searchSpaces = createSearchSpaces(botsInfo);
             // check number of search space
             if(searchSpaces.Count == 0) return;
 
-            var solutions = startSimulatedAnnealing(searchSpaces);
+            Dictionary<OutputStation, Solution> solutions = null;
+            // Method of solutions
+            switch(_config.method)
+            {
+                case SimulatedAnnealingPodSelectionMethod.PeriodicGreedy:
+                    solutions = greedySelection(searchSpaces);
+                break;
+                case SimulatedAnnealingPodSelectionMethod.PeriodicBruteForce:
+                    solutions = bruteSelection(searchSpaces);
+                break;
+                case SimulatedAnnealingPodSelectionMethod.PeriodicSimulatedAnnealing:
+                    solutions = startSimulatedAnnealing(searchSpaces);
+                break;
+                default:
+                    throw new Exception("Unsupported mode for solution. ");
+            }
 
             // output results from solution
-            var botsTask = new Dictionary<Bot, BotTask>();
-            foreach(var sol in solutions.Values)
-            {
-                var pt = sol.point;
-                var s = pt.searchSpace;
-                // assign bot
-                ExtractTask task = new ExtractTask(Instance, s.bot, pt.pod, s.station, sol.podRequests);
-                botManager.EnqueueTask(s.bot, task);
-                botsTask[s.bot] = task; // for later schedule priority output
-                botManager.logPodAssignment();
-                //botManager.RequestNewTask(s.bot);
-                // assign station request of inbound pods
-                foreach(var d in sol.stationRequests)
-                {
-                    botManager.AddExtract(d.Key, d.Value);
-                }
-                // allocate orders
-                foreach(var order in sol.orders)
-                {
-                    orderManager.AllocateOrder(order, s.station);
-                }
-                // statistic: record estimated station item throughput rate
-            }
-            pathManager.OutputScheduledPriority(botsTask);
+            outputSolutions(solutions);
+            
         }
         
         /// <summary>
@@ -462,8 +469,9 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 }
                 // sort the points
                 searchSpaces[station].points = searchSpaces[station].points.OrderByDescending(p => p.rate).ToList();
-                // process search space
-                searchSpaces[station].calculateCDF();
+                // process search space: only needed in simulated annealing
+                if(_config.method == SimulatedAnnealingPodSelectionMethod.PeriodicSimulatedAnnealing) 
+                    searchSpaces[station].calculateCDF();
             }
             return searchSpaces;
         }
@@ -548,6 +556,9 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
             return true;
         }
 
+        /// <summary>
+        /// Assign the first pod in pod-set in each station with available bot.
+        /// </summary>
         private void assignFirstPodSet(OutputStation station, BotInfo botInfo)
         {
             // Helper
@@ -566,66 +577,84 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
 
             // try to make reservation of path in solution, prevent affect by other solution
             // but it is ok to failed
-            List<ReservationTable.Interval> path = new();
-            var success = pathManager.schedulePath(out var endTime, ref path, botInfo.startTime, bot, botInfo.startWaypoint, pod.Waypoint, false);
-            endTime += Instance.LayoutConfig.PodTransferTime;
-            var successAgain = success && pathManager.schedulePath(out endTime, ref path, endTime, bot, pod.Waypoint, station.Waypoint, true);
-            if(success || successAgain) pathManager.OverwriteScheduledPath(bot, path);
+            if(schedulePath)
+            {
+                List<ReservationTable.Interval> path = new();
+                var success = pathManager.schedulePath(out var endTime, ref path, botInfo.startTime, bot, botInfo.startWaypoint, pod.Waypoint, false);
+                endTime += Instance.LayoutConfig.PodTransferTime;
+                var successAgain = success && pathManager.schedulePath(out endTime, ref path, endTime, bot, pod.Waypoint, station.Waypoint, true);
+                if(success || successAgain) pathManager.OverwriteScheduledPath(bot, path);
+            }
             return;
+        }
+
+        /// <summary>
+        /// Find solutions by iteratively selecting the pod with the highest rate that has not been selected by a previous station.
+        /// </summary>
+        /// <param name="searchSpaces"></param>
+        /// <returns></returns>
+        private Dictionary<OutputStation, Solution> greedySelection(Dictionary<OutputStation, SearchSpace> searchSpaces)
+        {
+            Dictionary<OutputStation, Solution> solutions = new();
+            // get initial solution by selecting one point for each station
+            foreach(var pair in searchSpaces.OrderBy(d => d.Value.points.Count)) //
+                initSolutions(ref solutions, pair.Value);
+            return solutions;
+        }
+        
+        /// <summary>
+        /// Find solutions by trying all combination of pods. 
+        /// </summary>
+        /// <param name="searchSpaces"></param>
+        /// <returns></returns>
+        private Dictionary<OutputStation, Solution> bruteSelection(Dictionary<OutputStation, SearchSpace> searchSpaces)
+        {
+            Dictionary<OutputStation, Solution> solutions = greedySelection(searchSpaces);
+            // brute-force try all pods
+            for(int i = 0; i < 5; i++) // only try certain times
+            {
+                bool changed = false;
+                foreach(var space in searchSpaces.Values)
+                {
+                    var points = new List<SearchSpace.Point>(space.points);
+                    points.Reverse();
+                    foreach(var point in space.points)
+                    {
+                        var success = updateSolutions(ref solutions, point, false);
+                        changed = changed || success;
+                    }
+                }
+                // end iteration if all solution has small difference
+                if(solutions.Values.All(s => Math.Abs(s.difference) == 0)) break;
+                // do until no solution change
+                if(!changed) break;
+            }
+            return solutions;
         }
 
         private Dictionary<OutputStation, Solution> startSimulatedAnnealing(Dictionary<OutputStation, SearchSpace> searchSpaces)
         {
-            Dictionary<OutputStation, Solution> solutions = new();
+            Dictionary<OutputStation, Solution> solutions = greedySelection(searchSpaces);
             // initialize the temperature
-            temperature = _config.initTemp;
+            temperature = _config.SAinitTemp;
 
-            // get initial solution by selecting one point for each station
-            foreach(var pair in searchSpaces.OrderBy(d => d.Value.points.Count)) //
-                initSolutions(ref solutions, pair.Value);
-
-            if(_config.BruteForceMethod)
+            // do until temperature is too low, or item throughput rate converge
+            while(temperature > _config.SAminTemp 
+                    && (DateTime.Now - startUpdate).TotalSeconds < _config.updatePeriod - 0.01) // remain 10ms to output solutions
             {
-                // brute-force try all pods
-                for(int i = 0; i < 5; i++) // only try certain times
-                {
-                    bool changed = false;
-                    foreach(var space in searchSpaces.Values)
-                    {
-                        var points = new List<SearchSpace.Point>(space.points);
-                        points.Reverse();
-                        foreach(var point in space.points)
-                        {
-                            var success = updateSolutions(ref solutions, point, false);
-                            changed = changed || success;
-                        }
-                    }
-                    // end iteration if all solution has small difference
-                    if(solutions.Values.All(s => Math.Abs(s.difference) == 0)) break;
-                    // do until no solution change
-                    if(!changed) break;
-                }
-            }
-            else
-            {
-                // do until temperature is too low, or item throughput rate converge
-                while(!_config.InitSolutionMethod && temperature > _config.minTemp 
-                      && (DateTime.Now - startUpdate).TotalSeconds < _config.updatePeriod - 0.01) // remain 10ms to output solutions
-                {
-                    // pick a random station
-                    var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
-                    // pick a point from the station's search space
-                    var point = space.Pick(Instance.Randomizer.NextDouble());
+                // pick a random station
+                var space = searchSpaces.Values.ToList()[Instance.Randomizer.NextInt(searchSpaces.Values.Count)];
+                // pick a point from the station's search space
+                var point = space.Pick(Instance.Randomizer.NextDouble());
 
-                    updateSolutions(ref solutions, point);
+                updateSolutions(ref solutions, point);
 
-                    // end iteration if all solution has small difference
-                    if(solutions.Values.All(s => Math.Abs(s.difference) < _config.minDifference))
-                        break;
+                // end iteration if all solution has small difference
+                if(solutions.Values.All(s => Math.Abs(s.difference) < _config.SAminDifference))
+                    break;
 
-                    // decrease temperature
-                    temperature *= _config.coolingRate;
-                }
+                // decrease temperature
+                temperature *= _config.SAcoolingRate;
             }
             return solutions;
         }
@@ -636,23 +665,52 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         private bool initSolutions(ref Dictionary<OutputStation, Solution> solutions, SearchSpace space)
         {
             Solution sol = null;
+            // search until one point can be selected
             foreach(var point in space.points)
             {
                 // skip exist pod
                 if(solutions.Values.Any(s => s.point.pod == point.pod)) continue;
-                sol = createSolution(solutions, point, out List<ReservationTable.Interval> path);
+                sol = createSolution(solutions, point, out _);
                 if(sol != null)
                 {
                     // store the solution
-                    sol.difference =double.MaxValue;
                     solutions.Add(point.station, sol);
-                    pathManager.OverwriteScheduledPath(point.searchSpace.bot, path);
                     return true;
                 }
             }
             return false;
         }
-
+        
+        /// <summary>
+        /// According to the solution, assign pod selection, order assignment. 
+        /// </summary>
+        /// <param name="solutions"></param>
+        private void outputSolutions(Dictionary<OutputStation, Solution> solutions)
+        {
+            var botsTask = new Dictionary<Bot, BotTask>();
+            foreach(var sol in solutions.Values)
+            {
+                var pt = sol.point;
+                var s = pt.searchSpace;
+                // assign bot
+                ExtractTask task = new ExtractTask(Instance, s.bot, pt.pod, s.station, sol.podRequests);
+                botManager.EnqueueTask(s.bot, task);
+                botsTask[s.bot] = task; // for later schedule priority output
+                botManager.logPodAssignment();
+                //botManager.RequestNewTask(s.bot);
+                // assign station request of inbound pods
+                foreach(var d in sol.stationRequests)
+                {
+                    botManager.AddExtract(d.Key, d.Value);
+                }
+                // allocate orders
+                foreach(var order in sol.orders)
+                {
+                    orderManager.AllocateOrder(order, s.station);
+                }
+                // statistic: record estimated station item throughput rate
+            }
+        }
         /// <summary>
         /// Update the solutions with the point, if its item throughput rate is acceptable
         /// </summary>
@@ -857,22 +915,26 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                 }
             }
             if(sol.orders.Count == 0) return null;
-
-            // Helpers
-            var s = point.searchSpace;
-            path = new();
-            // estimate time of: bot -> pod
-            if(!pathManager.schedulePath(out double endTime, ref path, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false))
-                return null; // failed to find path in window
-            // Add time of lifting pod
-            endTime += Instance.LayoutConfig.PodTransferTime; 
-            // estimate time of: pod->station
-            if(!pathManager.schedulePath(out endTime, ref path, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true))
-                return null; // / failed to find path in window
-            // Estimated Item throughput rate of the station
-            var itemNum = sol.orders.Sum(o => o.Positions.Sum(p => p.Value));
-            sol.stationRate = itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, s.station.GetCurrentQueueTime()) 
-                                      + itemNum * Instance.LayoutConfig.ItemPickTime); 
+            
+            // do path scheduling to generate estimated 
+            if(this.schedulePath)
+            {
+                // Helpers
+                var s = point.searchSpace;
+                path = new();
+                // estimate time of: bot -> pod
+                if(!pathManager.schedulePath(out double endTime, ref path, s.startTime,s.bot, s.bot.TargetWaypoint, point.pod.Waypoint, false))
+                    return null; // failed to find path in window
+                // Add time of lifting pod
+                endTime += Instance.LayoutConfig.PodTransferTime; 
+                // estimate time of: pod->station
+                if(!pathManager.schedulePath(out endTime, ref path, endTime, s.bot, point.pod.Waypoint, s.station.Waypoint, true))
+                    return null; // / failed to find path in window
+                // Estimated Item throughput rate of the station
+                var itemNum = sol.orders.Sum(o => o.Positions.Sum(p => p.Value));
+                sol.stationRate = itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, s.station.GetCurrentQueueTime()) 
+                                        + itemNum * Instance.LayoutConfig.ItemPickTime); 
+            }
             return sol;
         }
 
@@ -888,8 +950,8 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         {
             selectedPod = null;
             extractRequests = null;
-            if (_config.GreedyMethod)
-                return GreedyMethod(out selectedPod, out extractRequests, bot, oStation);
+            if (_config.method == SimulatedAnnealingPodSelectionMethod.ImmediateGreedy)
+                return ImmediateGreedySelection(out selectedPod, out extractRequests, bot, oStation);
             else
             {
                 if(pendingPods[oStation].Count == 0) return false;
@@ -910,7 +972,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
         /// A greedy method of maximizing item throughput rate by considering 
         /// number of items in fully-fulfillable orders and path congestion
         /// </summary>
-        public bool GreedyMethod(out Pod selectedPod, out List<ExtractRequest> extractRequests, Bot bot, OutputStation oStation)
+        public bool ImmediateGreedySelection(out Pod selectedPod, out List<ExtractRequest> extractRequests, Bot bot, OutputStation oStation)
         {
             // check order manager
             if (Instance.Controller.OrderManager.GetType() != typeof(FullySuppliedOrderManager))
