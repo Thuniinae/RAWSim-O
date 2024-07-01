@@ -452,12 +452,8 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                     if(bot.CurrentTask.Type == BotTaskType.Rest) startWaypoint = bot.CurrentWaypoint; // since rest task will be canceled
                     double endTime = botStartTime;
                     endTime += Distances.EstimateManhattanTime(startWaypoint, pt.pod.Waypoint, Instance);
-                    if(double.IsInfinity(endTime)) return;
                     endTime += Instance.LayoutConfig.PodTransferTime;
-                    var connectedPoints = pt.pod.Waypoint.GetInfoConnectedWaypoints().Cast<Waypoint>().ToList();
-                    var entryPoint = connectedPoints.Where(p => !p.GetInfoStorageLocation()).First(); // point before entering pod storage location
-                    endTime += Distances.EstimateManhattanTime(entryPoint, station.Waypoint, Instance);
-                    if(double.IsInfinity(endTime)) return;
+                    endTime += Distances.EstimateManhattanTime(pt.pod.Waypoint, station.Waypoint, Instance);
                     pt.rate = pt.itemNum / (Math.Max(endTime-Instance.Controller.CurrentTime, station.GetCurrentQueueTime()) 
                                         + pt.itemNum * Instance.LayoutConfig.ItemPickTime); 
                 });
