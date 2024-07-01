@@ -439,7 +439,10 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                     continue;
                 }
                 // Take certain amount of pods with most items
-                searchSpaces[station].KeepBest(_config.searchPodNum);
+                if(_config.method == SimulatedAnnealingPodSelectionMethod.PeriodicGreedy)
+                    searchSpaces[station].KeepBest(searchSpaces.Count);
+                else
+                    searchSpaces[station].KeepBest(_config.searchPodNum);
                 // calculate item throughput rate in search space
                 searchSpaces[station].points.ForEach(pt => {
                     pt.rate = 0;
