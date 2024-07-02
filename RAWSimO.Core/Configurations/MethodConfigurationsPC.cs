@@ -833,7 +833,7 @@ namespace RAWSimO.Core.Configurations
         /// </summary>
         public double updatePeriod = 1.0;
         /// <summary>
-        /// Number of pods that consider it's arrival time to the station
+        /// Number of pods that consider it's arrival time to the station, will use number of search space if smaller than 1. 
         /// </summary>
         public int searchPodNum = 50;
         /// <summary>

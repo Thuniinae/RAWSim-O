@@ -439,7 +439,7 @@ namespace RAWSimO.Core.Control.Defaults.PodSelection
                     continue;
                 }
                 // Take certain amount of pods with most items
-                if(_config.method == SimulatedAnnealingPodSelectionMethod.PeriodicGreedy)
+                if(_config.searchPodNum <= 0)
                     searchSpaces[station].KeepBest(searchSpaces.Count);
                 else
                     searchSpaces[station].KeepBest(_config.searchPodNum);
