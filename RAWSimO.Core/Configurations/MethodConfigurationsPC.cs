@@ -825,44 +825,34 @@ namespace RAWSimO.Core.Configurations
     public class SimulatedAnnealingPodSelectionConfiguration : PodSelectionConfiguration
     {
         /// <summary>
-        /// Replace simulated annealing with greedy method to selection pod for each station individually. 
-        /// The Method configurations are prioritized top-down. 
+        /// The method used in the algorithm. 
         /// </summary>
-        public bool GreedyMethod = false;
-        /// <summary>
-        /// Use brute-force method to find optimal pods. 
-        /// The Method configurations are prioritized top-down. 
-        /// </summary>
-        public bool BruteForceMethod = false;
-        /// <summary>
-        /// Take the initial solution as final solution. 
-        /// The Method configurations are prioritized top-down. 
-        /// </summary>
-        public bool InitSolutionMethod = false;
+        public SimulatedAnnealingPodSelectionMethod method = SimulatedAnnealingPodSelectionMethod.PeriodicGreedy;
         /// <summary>
         /// The time period in second between running Simulated Annealing.
         /// </summary>
         public double updatePeriod = 1.0;
         /// <summary>
-        /// Initial temperature of Simulated Annealing Algorithm
-        /// </summary>
-        public int initTemp = 100;
-        /// <summary>
-        /// Cooling rate of the temperature: t' = t * coolingRate
-        /// </summary>
-        public double coolingRate = 0.9;
-        /// <summary>
-        /// Minimal temperature of the system, stop algorithm when temperature is lower than this.
-        /// </summary>
-        public double minTemp = 0.5;
-        /// <summary>
-        /// Number of pods that consider it's arrival time to the station
+        /// Number of pods that consider it's arrival time to the station, will use number of search space if smaller than 1. 
         /// </summary>
         public int searchPodNum = 50;
         /// <summary>
+        /// Initial temperature of Simulated Annealing Algorithm
+        /// </summary>
+        public int SAinitTemp = 100;
+        /// <summary>
+        /// Cooling rate of the temperature: t' = t * coolingRate
+        /// </summary>
+        public double SAcoolingRate = 0.9;
+        /// <summary>
+        /// Minimal temperature of the system, stop algorithm when temperature is lower than this.
+        /// </summary>
+        public double SAminTemp = 0.5;
+        
+        /// <summary>
         /// End the algorithm when all stations considered in the algorithm have item throughput rate difference smaller than this value.
         /// </summary>
-        public double minDifference = 0.001;
+        public double SAminDifference = 0.001;
         /// <summary>
         /// Indicates whether more suitable extract requests are included in an ongoing extract task on-the-fly.
         /// </summary>
@@ -879,7 +869,6 @@ namespace RAWSimO.Core.Configurations
         /// Indicates the mode for filtering the requests when deciding the actual reservations for a pod.
         /// </summary>
         public PodSelectionExtractRequestFilteringMode FilterForReservation = PodSelectionExtractRequestFilteringMode.AssignedAndCompleteQueued;
-
         /// <summary>
         /// Rule settings for selecting an input station for a bot carrying a pod (main rule).
         /// </summary>
@@ -917,6 +906,28 @@ namespace RAWSimO.Core.Configurations
         /// </summary>
         /// <returns>The type of the method.</returns>
         public override PodSelectionMethodType GetMethodType(){return PodSelectionMethodType.SimulatedAnnealing;}
+    }
+    /// <summary>
+    /// The method of the algorithm.
+    /// </summary>
+    public enum SimulatedAnnealingPodSelectionMethod
+    {
+        /// <summary>
+        /// Use greedy method to select a pod as soon as the bot is available. 
+        /// </summary>
+        ImmediateGreedy,
+        /// <summary>
+        /// Periodically assign pods to available bots using the greedy method. 
+        /// </summary>
+        PeriodicGreedy,
+        /// <summary>
+        /// Periodically assign pods to available bots using Brute Force method. 
+        /// </summary>
+        PeriodicBruteForce,
+        /// <summary>
+        /// Periodically assign pods to available bots using Simulated Annealing method. 
+        /// </summary>
+        PeriodicSimulatedAnnealing
     }
     #endregion
 
