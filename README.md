@@ -1,3 +1,16 @@
+# Introduction
+This is a modified version of RAWSim-O, incorporating the HADOD algorithm from [LBJiao/E-RAWSim-O](https://github.com/LBJiao/E-RAWSim-O/tree/master) with a newly proposed algorithm based on HADOD. The HADOD algorithm is configured in the files under HADODn and HADODv. The difference between these two configurations lies in the path planning algorithms used: WHCAn* for HADODn and WHCAv* for HADODv.
+
+The proposed algorithm, which starts with "SA" in the configuration files, aims to optimize the POA and PPS problems by focusing on station throughput rate. It further refines these optimizations using a combination of greedy, simulated annealing, and brute force approaches. However, despite the increased computational effort, these methods did not yield significant improvements over the initial solution and required considerably more time.
+
+These approaches are selected in the configuration files, with example configurations provided. The capitalized letters in the configuration files indicate the optimization approach used: "I" for the initial solution (which performed the best), "G" for the greedy approach, a blank space for simulated annealing, and "B" for the brute force method. The lowercase letter that follows also denotes the choice of path planning algorithm.
+
+# Comparison
+The following comparison examines a sequential algorithm of heuristic approaches optimized in this [paper](https://www.sciencedirect.com/science/article/pii/S2214716019300946), the HADOD algorithm (HADODn), and the proposed algorithm (SAIn), using 1000 SKUs and a layout (Sv5.xlayo) with 2958 pods.
+
+![comparison_overall_item_throughoput_rate](Material/Wiki/VarBotRate.svg)
+![comparison_overall_total_travel_distance](Material/Wiki/VarBotDistance.svg)
+![comparison_overall_computational_time](Material/Wiki/VarBotTime.svg)
 # RAWSim-O
 
 RAWSim-O is a discrete event-based simulation for Robotic Mobile Fulfillment Systems. The intention of the simulation framework is to provide a tool for researching effects of multiple decision problems that occur when running such a system. For this, the framework enables easy extensibility for implementing new decision methods for the different decision problems.
